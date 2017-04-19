@@ -268,6 +268,11 @@ void TranslatorGLSL::writeExtensionBehavior(TIntermNode *root)
                 sink << "#extension GL_ARB_draw_buffers : " << getBehaviorString(iter.second)
                      << "\n";
             }
+
+            if (iter.first == "GL_OVR_multiview")
+            {
+                sink << "#extension GL_OVR_multiview : " << getBehaviorString(iter.second) << "\n";
+            }
         }
     }
 

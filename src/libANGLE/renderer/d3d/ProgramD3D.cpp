@@ -318,13 +318,19 @@ ProgramD3DMetadata::ProgramD3DMetadata(RendererD3D *renderer,
           renderer->getWorkarounds().useInstancedPointSpriteEmulation),
       mUsesViewScale(renderer->presentPathFastEnabled()),
       mVertexShader(vertexShader),
-      mFragmentShader(fragmentShader)
+      mFragmentShader(fragmentShader),
+      mCanOutputVpRtIndexInVs(renderer->canWriteVpRtIndexFromVs())
 {
 }
 
 int ProgramD3DMetadata::getRendererMajorShaderModel() const
 {
     return mRendererMajorShaderModel;
+}
+
+bool ProgramD3DMetadata::canWriteVpRtIndexFromVs() const
+{
+    return mCanOutputVpRtIndexInVs;
 }
 
 bool ProgramD3DMetadata::usesBroadcast(const gl::ContextState &data) const
@@ -361,6 +367,15 @@ bool ProgramD3DMetadata::usesInsertedPointCoordValue() const
 bool ProgramD3DMetadata::usesViewScale() const
 {
     return mUsesViewScale;
+}
+
+bool ProgramD3DMetadata::usesViewID() const
+{
+    if (mVertexShader)
+    {
+        return mVertexShader->usesViewID();
+    }
+    return false;
 }
 
 bool ProgramD3DMetadata::addsPointCoordToVertexShader() const
@@ -502,6 +517,7 @@ ProgramD3D::ProgramD3D(const gl::ProgramState &state, RendererD3D *renderer)
       mVertexUniformStorage(nullptr),
       mFragmentUniformStorage(nullptr),
       mComputeUniformStorage(nullptr),
+      mUsesViewID(false),
       mUsedVertexSamplerRange(0),
       mUsedPixelSamplerRange(0),
       mUsedComputeSamplerRange(0),
@@ -526,7 +542,8 @@ bool ProgramD3D::usesGeometryShader(GLenum drawMode) const
 {
     if (drawMode != GL_POINTS)
     {
-        return mUsesFlatInterpolation;
+        return (mUsesFlatInterpolation ||
+                (mUsesViewID && (mRenderer->canWriteVpRtIndexFromVs() == false)));
     }
 
     return usesPointSpriteEmulation() && !usesInstancedPointSpriteEmulation();
@@ -535,6 +552,11 @@ bool ProgramD3D::usesGeometryShader(GLenum drawMode) const
 bool ProgramD3D::usesInstancedPointSpriteEmulation() const
 {
     return mRenderer->getWorkarounds().useInstancedPointSpriteEmulation;
+}
+
+bool ProgramD3D::usesViewID() const
+{
+    return mUsesViewID && mRenderer->getMajorShaderModel() >= 4;
 }
 
 GLint ProgramD3D::getSamplerMapping(gl::SamplerType type,
@@ -817,6 +839,7 @@ LinkResult ProgramD3D::load(const ContextImpl *contextImpl,
                       sizeof(angle::CompilerWorkaroundsD3D));
     stream->readBool(&mUsesFragDepth);
     stream->readBool(&mUsesPointSize);
+    stream->readBool(&mUsesViewID);
     stream->readBool(&mUsesFlatInterpolation);
 
     const size_t pixelShaderKeySize = stream->readInt<unsigned int>();
@@ -1040,6 +1063,7 @@ gl::Error ProgramD3D::save(gl::BinaryOutputStream *stream)
                        sizeof(angle::CompilerWorkaroundsD3D));
     stream->writeInt(mUsesFragDepth);
     stream->writeInt(mUsesPointSize);
+    stream->writeInt(mUsesViewID);
     stream->writeInt(mUsesFlatInterpolation);
 
     const std::vector<PixelShaderOutputVariable> &pixelShaderKey = mPixelShaderKey;
@@ -1275,7 +1299,7 @@ gl::Error ProgramD3D::getGeometryExecutableForPrimitiveType(const gl::ContextSta
 
     std::string geometryHLSL = mDynamicHLSL->generateGeometryShaderHLSL(
         geometryShaderType, data, mState, mRenderer->presentPathFastEnabled(),
-        mGeometryShaderPreamble);
+        mGeometryShaderPreamble, mUsesViewID);
 
     gl::InfoLog tempInfoLog;
     gl::InfoLog *currentInfoLog = infoLog ? infoLog : &tempInfoLog;
@@ -1541,6 +1565,7 @@ LinkResult ProgramD3D::link(ContextImpl *contextImpl,
         mDynamicHLSL->getPixelShaderOutputKey(data, mState, metadata, &mPixelShaderKey);
         mUsesFragDepth = metadata.usesFragDepth();
 
+        mUsesViewID = vertexShaderD3D->usesViewID();
         // Cache if we use flat shading
         mUsesFlatInterpolation = (FindFlatInterpolationVarying(fragmentShader->getVaryings()) ||
                                   FindFlatInterpolationVarying(vertexShader->getVaryings()));
@@ -2302,6 +2327,7 @@ void ProgramD3D::reset()
     mPixelShaderKey.clear();
     mUsesPointSize = false;
     mUsesFlatInterpolation = false;
+    mUsesViewID            = false;
 
     SafeDeleteContainer(mD3DUniforms);
     mD3DUniformBlocks.clear();

@@ -1158,6 +1158,37 @@ GL_APICALL void GL_APIENTRY glVertexAttribDivisorANGLE (GLuint index, GLuint div
 #endif
 #endif /* GL_ANGLE_instanced_arrays */
 
+#ifndef GL_EXT_multi_view
+#define GL_EXT_multi_view 1
+//#define GL_MAX_VIEWS_EXT 0xDEADBEEF
+// typedef void (GL_APIENTRYP PFNGLDRAWARRAYSINSTANCEDANGLEPROC) (GLenum mode, GLint first, GLsizei
+// count, GLsizei primcount);
+// typedef void (GL_APIENTRYP PFNGLDRAWELEMENTSINSTANCEDANGLEPROC) (GLenum mode, GLsizei count,
+// GLenum type, const void *indices, GLsizei primcount);
+typedef void(GL_APIENTRYP PFNGLMULTIVIEWSETVIEWPORTSEXTPROC)(GLsizei count, const GLint *v);
+typedef void(GL_APIENTRYP PFNGLMULTIVIEWDRAWELEMENTSEXTPROC)(GLenum mode,
+                                                             GLsizei count,
+                                                             GLenum type,
+                                                             const void *indices,
+                                                             GLbitfield viewMask);
+typedef void(GL_APIENTRYP PFNGLMULTIVIEWENABLEEXTPROC)(GLboolean enable);
+typedef GLboolean(GL_APIENTRYP PFNGLMULTIVIEWISENABLEDEXTPROC)();
+#ifdef GL_GLEXT_PROTOTYPES
+// GL_APICALL void GL_APIENTRY glDrawArraysInstancedANGLE(GLenum mode, GLint first, GLsizei count,
+// GLsizei primcount);
+// GL_APICALL void GL_APIENTRY glDrawElementsInstancedANGLE(GLenum mode, GLsizei count, GLenum type,
+// const void *indices, GLsizei primcount);
+GL_APICALL void GL_APIENTRY glMultiViewSetViewportsEXT(GLsizei count, const GLint *v);
+GL_APICALL void GL_APIENTRY glMultiViewDrawElementsEXT(GLenum mode,
+                                                       GLsizei count,
+                                                       GLenum type,
+                                                       const void *indices,
+                                                       GLbitfield viewMask);
+GL_APICALL void GL_APIENTRY glMultiViewEnableEXT(GLboolean enable);
+GL_APICALL GLboolean GL_APIENTRY glMultiViewIsEnabledEXT();
+#endif
+#endif /* GL_EXT_multi_view */
+
 #ifndef GL_ANGLE_pack_reverse_row_order
 #define GL_ANGLE_pack_reverse_row_order 1
 #define GL_PACK_REVERSE_ROW_ORDER_ANGLE   0x93A4
@@ -3435,6 +3466,18 @@ GL_APICALL void GL_APIENTRY glViewportSwizzleNV (GLuint index, GLenum swizzlex, 
 #define GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_BASE_VIEW_INDEX_OVR 0x9632
 #define GL_MAX_VIEWS_OVR                  0x9631
 #define GL_FRAMEBUFFER_INCOMPLETE_VIEW_TARGETS_OVR 0x9633
+
+#define GL_MULTIVIEW_DISABLED_OVR 0x0000
+#define GL_MULTIVIEW_AUTO_OVR 0x0001
+#define GL_MULTIVIEW_DEFAULTFB_SIDEBYSIDE_OVR 0x0002
+#define GL_MULTIVIEW_OFFSCREEN_TEXARRAY_OVR 0x0003
+#define GL_ATTACHMENT_TO_DEFAULT_NOCOPY_OVR 0x0000
+#define GL_ATTACHMENT_TO_DEFAULT_COPY0_OVR 0x0001
+#define GL_ATTACHMENT_TO_DEFAULT_COPY1_OVR 0x0002
+#define GL_ATTACHMENT_TO_DEFAULT_COPY0AND1_SBS_OVR 0x0003
+
+#define GL_FRAMEBUFFER_ARRAY
+
 typedef void (GL_APIENTRYP PFNGLFRAMEBUFFERTEXTUREMULTIVIEWOVRPROC) (GLenum target, GLenum attachment, GLuint texture, GLint level, GLint baseViewIndex, GLsizei numViews);
 #ifdef GL_GLEXT_PROTOTYPES
 GL_APICALL void GL_APIENTRY glFramebufferTextureMultiviewOVR (GLenum target, GLenum attachment, GLuint texture, GLint level, GLint baseViewIndex, GLsizei numViews);

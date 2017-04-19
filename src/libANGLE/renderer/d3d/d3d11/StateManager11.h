@@ -60,12 +60,25 @@ class StateManager11 final : angle::NonCopyable
 
     gl::Error setRasterizerState(const gl::RasterizerState &rasterState);
 
-    void setScissorRectangle(const gl::Rectangle &scissor, bool enabled);
+    void setScissorRectangle(const gl::State &glState, const GLint defaultWidth = 0);
+    void setScissorRectangle_fl9(const gl::Rectangle *scissor, bool enabled);
 
-    void setViewport(const gl::Caps *caps, const gl::Rectangle &viewport, float zNear, float zFar);
+    void setViewport(const gl::Caps *caps, const gl::State &glState, const GLint defaultWidth = 0);
+    void setViewport_fl9(const gl::Caps *caps,
+                         const gl::Rectangle &viewport,
+                         float zNear,
+                         float zFar);
+
+    void setScissorRectangleOrig(const gl::Rectangle &scissor, bool enabled);
+    void setViewportOrig(const gl::Caps *caps,
+                         const gl::Rectangle &viewport,
+                         float zNear,
+                         float zFar);
 
     void updatePresentPath(bool presentPathFastActive,
                            const gl::FramebufferAttachment *framebufferAttachment);
+
+    void updateMultiviewState(const gl::State &state);
 
     const dx_VertexConstants11 &getVertexConstants() const { return mVertexConstants; }
     const dx_PixelConstants11 &getPixelConstants() const { return mPixelConstants; }
@@ -131,13 +144,19 @@ class StateManager11 final : angle::NonCopyable
     // Currently applied scissor rectangle state
     bool mScissorStateIsDirty;
     bool mCurScissorEnabled;
-    gl::Rectangle mCurScissorRect;
+    gl::Rectangle mCurScissorRect[gl::IMPLEMENTATION_MAX_VIEWPORT_SCISSOR_RECTS];
+    int mCurScissorCount;
 
     // Currently applied viewport state
     bool mViewportStateIsDirty;
-    gl::Rectangle mCurViewport;
+    gl::Rectangle mCurViewport[gl::IMPLEMENTATION_MAX_VIEWPORT_SCISSOR_RECTS];
+    int mCurViewportCount;
     float mCurNear;
     float mCurFar;
+
+    // TODO(Shahmeer): Add mCurBaseViewIndex
+    int mCurViewCount;
+    int mCurMultiviewMode;
 
     // Things needed in viewport state
     dx_VertexConstants11 mVertexConstants;
@@ -161,6 +180,7 @@ class StateManager11 final : angle::NonCopyable
     {
         uintptr_t srv;
         uintptr_t resource;
+        uintptr_t stagingResource;
         D3D11_SHADER_RESOURCE_VIEW_DESC desc;
     };
 

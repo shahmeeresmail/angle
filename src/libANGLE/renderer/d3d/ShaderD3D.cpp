@@ -62,6 +62,15 @@ ShaderD3D::ShaderD3D(const gl::ShaderState &data, const angle::WorkaroundsD3D &w
     {
         mAdditionalOptions |= SH_REWRITE_TEXELFETCHOFFSET_TO_TEXELFETCH;
     }
+
+    // TODO(Shahmeer): Handle VIEWID to uniform
+    /*
+    if (workarounds.translateViewIdOvrToUniform)
+    {
+        mAdditionalOptions |= SH_TRANSLATE_VIEWID_OVR_TO_UNIFORM;
+    }
+    */
+
     if (workarounds.rewriteUnaryMinusOperator)
     {
         mAdditionalOptions |= SH_REWRITE_INTEGER_UNARY_MINUS_OPERATOR;
@@ -94,6 +103,7 @@ void ShaderD3D::uncompile()
     mUsesFragCoord = false;
     mUsesFrontFacing = false;
     mUsesPointSize = false;
+    mUsesViewID = false;
     mUsesPointCoord = false;
     mUsesDepthRange = false;
     mUsesFragDepth = false;
@@ -196,6 +206,7 @@ bool ShaderD3D::postTranslateCompile(gl::Compiler *compiler, std::string *infoLo
     mUsesPointCoord            = translatedSource.find("GL_USES_POINT_COORD") != std::string::npos;
     mUsesDepthRange            = translatedSource.find("GL_USES_DEPTH_RANGE") != std::string::npos;
     mUsesFragDepth             = translatedSource.find("GL_USES_FRAG_DEPTH") != std::string::npos;
+    mUsesViewID                = translatedSource.find("GL_USES_VIEW_ID") != std::string::npos;
     mUsesDiscardRewriting =
         translatedSource.find("ANGLE_USES_DISCARD_REWRITING") != std::string::npos;
     mUsesNestedBreak  = translatedSource.find("ANGLE_USES_NESTED_BREAK") != std::string::npos;

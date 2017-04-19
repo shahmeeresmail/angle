@@ -60,6 +60,7 @@ class ShaderD3D : public ShaderImpl
     bool usesPointCoord() const { return mUsesPointCoord; }
     bool usesDepthRange() const { return mUsesDepthRange; }
     bool usesFragDepth() const { return mUsesFragDepth; }
+    bool usesViewID() const { return mUsesViewID; }
 
     ShShaderOutput getCompilerOutputType() const;
 
@@ -76,6 +77,7 @@ class ShaderD3D : public ShaderImpl
     bool mUsesDiscardRewriting;
     bool mUsesNestedBreak;
     bool mRequiresIEEEStrictCompiling;
+    bool mUsesViewID;
 
     ShShaderOutput mCompilerOutputType;
     mutable std::string mDebugInfo;

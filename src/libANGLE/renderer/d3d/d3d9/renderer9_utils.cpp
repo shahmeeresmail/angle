@@ -425,6 +425,9 @@ void GenerateCaps(IDirect3D9 *d3d9,
     caps->maxViewportWidth = caps->max2DTextureSize;
     caps->maxViewportHeight = caps->maxViewportWidth;
 
+    // Multiview does not support DX9
+    caps->maxViewsOvr = 0;
+
     // Point size is clamped to 1.0f when the shader model is less than 3
     caps->minAliasedPointSize = 1.0f;
     caps->maxAliasedPointSize = ((D3DSHADER_VERSION_MAJOR(deviceCaps.PixelShaderVersion) >= 3) ? deviceCaps.MaxPointSize : 1.0f);

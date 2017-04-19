@@ -159,6 +159,7 @@ class RendererD3D : public BufferFactoryD3D
     virtual unsigned int getReservedFragmentUniformBuffers() const = 0;
 
     virtual int getMajorShaderModel() const = 0;
+    virtual bool canWriteVpRtIndexFromVs() const = 0;
 
     const angle::WorkaroundsD3D &getWorkarounds() const;
 

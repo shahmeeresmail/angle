@@ -1146,6 +1146,18 @@ void Context::useProgram(GLuint program)
     mGLState.setProgram(this, getProgram(program));
 }
 
+void Context::linkProgram(Program *program)
+{
+    Error error = program->link(this);
+    if (error.isError())
+    {
+        handleError(error);
+        return;
+    }
+
+    mGLState.syncNewlyLinkedProgram(program);
+}
+
 void Context::bindTransformFeedback(GLuint transformFeedbackHandle)
 {
     TransformFeedback *transformFeedback =
@@ -1407,172 +1419,176 @@ void Context::getIntegerv(GLenum pname, GLint *params)
             params[1] = mCaps.maxViewportHeight;
         }
         break;
-      case GL_COMPRESSED_TEXTURE_FORMATS:
-        std::copy(mCaps.compressedTextureFormats.begin(), mCaps.compressedTextureFormats.end(), params);
-        break;
-      case GL_RESET_NOTIFICATION_STRATEGY_EXT:
-        *params = mResetStrategy;
-        break;
-      case GL_NUM_SHADER_BINARY_FORMATS:
-          *params = static_cast<GLint>(mCaps.shaderBinaryFormats.size());
-        break;
-      case GL_SHADER_BINARY_FORMATS:
-        std::copy(mCaps.shaderBinaryFormats.begin(), mCaps.shaderBinaryFormats.end(), params);
-        break;
-      case GL_NUM_PROGRAM_BINARY_FORMATS:
-          *params = static_cast<GLint>(mCaps.programBinaryFormats.size());
-        break;
-      case GL_PROGRAM_BINARY_FORMATS:
-        std::copy(mCaps.programBinaryFormats.begin(), mCaps.programBinaryFormats.end(), params);
-        break;
-      case GL_NUM_EXTENSIONS:
-        *params = static_cast<GLint>(mExtensionStrings.size());
-        break;
+        case GL_MAX_VIEWS_OVR:
+            *params = mCaps.maxViewsOvr;
+            break;
+        case GL_COMPRESSED_TEXTURE_FORMATS:
+            std::copy(mCaps.compressedTextureFormats.begin(), mCaps.compressedTextureFormats.end(),
+                      params);
+            break;
+        case GL_RESET_NOTIFICATION_STRATEGY_EXT:
+            *params = mResetStrategy;
+            break;
+        case GL_NUM_SHADER_BINARY_FORMATS:
+            *params = static_cast<GLint>(mCaps.shaderBinaryFormats.size());
+            break;
+        case GL_SHADER_BINARY_FORMATS:
+            std::copy(mCaps.shaderBinaryFormats.begin(), mCaps.shaderBinaryFormats.end(), params);
+            break;
+        case GL_NUM_PROGRAM_BINARY_FORMATS:
+            *params = static_cast<GLint>(mCaps.programBinaryFormats.size());
+            break;
+        case GL_PROGRAM_BINARY_FORMATS:
+            std::copy(mCaps.programBinaryFormats.begin(), mCaps.programBinaryFormats.end(), params);
+            break;
+        case GL_NUM_EXTENSIONS:
+            *params = static_cast<GLint>(mExtensionStrings.size());
+            break;
 
-      // GL_KHR_debug
-      case GL_MAX_DEBUG_MESSAGE_LENGTH:
-          *params = mExtensions.maxDebugMessageLength;
-          break;
-      case GL_MAX_DEBUG_LOGGED_MESSAGES:
-          *params = mExtensions.maxDebugLoggedMessages;
-          break;
-      case GL_MAX_DEBUG_GROUP_STACK_DEPTH:
-          *params = mExtensions.maxDebugGroupStackDepth;
-          break;
-      case GL_MAX_LABEL_LENGTH:
-          *params = mExtensions.maxLabelLength;
-          break;
+        // GL_KHR_debug
+        case GL_MAX_DEBUG_MESSAGE_LENGTH:
+            *params = mExtensions.maxDebugMessageLength;
+            break;
+        case GL_MAX_DEBUG_LOGGED_MESSAGES:
+            *params = mExtensions.maxDebugLoggedMessages;
+            break;
+        case GL_MAX_DEBUG_GROUP_STACK_DEPTH:
+            *params = mExtensions.maxDebugGroupStackDepth;
+            break;
+        case GL_MAX_LABEL_LENGTH:
+            *params = mExtensions.maxLabelLength;
+            break;
 
-      // GL_EXT_disjoint_timer_query
-      case GL_GPU_DISJOINT_EXT:
-          *params = mImplementation->getGPUDisjoint();
-          break;
-      case GL_MAX_FRAMEBUFFER_WIDTH:
-          *params = mCaps.maxFramebufferWidth;
-          break;
-      case GL_MAX_FRAMEBUFFER_HEIGHT:
-          *params = mCaps.maxFramebufferHeight;
-          break;
-      case GL_MAX_FRAMEBUFFER_SAMPLES:
-          *params = mCaps.maxFramebufferSamples;
-          break;
-      case GL_MAX_SAMPLE_MASK_WORDS:
-          *params = mCaps.maxSampleMaskWords;
-          break;
-      case GL_MAX_COLOR_TEXTURE_SAMPLES:
-          *params = mCaps.maxColorTextureSamples;
-          break;
-      case GL_MAX_DEPTH_TEXTURE_SAMPLES:
-          *params = mCaps.maxDepthTextureSamples;
-          break;
-      case GL_MAX_INTEGER_SAMPLES:
-          *params = mCaps.maxIntegerSamples;
-          break;
-      case GL_MAX_VERTEX_ATTRIB_RELATIVE_OFFSET:
-          *params = mCaps.maxVertexAttribRelativeOffset;
-          break;
-      case GL_MAX_VERTEX_ATTRIB_BINDINGS:
-          *params = mCaps.maxVertexAttribBindings;
-          break;
-      case GL_MAX_VERTEX_ATTRIB_STRIDE:
-          *params = mCaps.maxVertexAttribStride;
-          break;
-      case GL_MAX_VERTEX_ATOMIC_COUNTER_BUFFERS:
-          *params = mCaps.maxVertexAtomicCounterBuffers;
-          break;
-      case GL_MAX_VERTEX_ATOMIC_COUNTERS:
-          *params = mCaps.maxVertexAtomicCounters;
-          break;
-      case GL_MAX_VERTEX_IMAGE_UNIFORMS:
-          *params = mCaps.maxVertexImageUniforms;
-          break;
-      case GL_MAX_VERTEX_SHADER_STORAGE_BLOCKS:
-          *params = mCaps.maxVertexShaderStorageBlocks;
-          break;
-      case GL_MAX_FRAGMENT_ATOMIC_COUNTER_BUFFERS:
-          *params = mCaps.maxFragmentAtomicCounterBuffers;
-          break;
-      case GL_MAX_FRAGMENT_ATOMIC_COUNTERS:
-          *params = mCaps.maxFragmentAtomicCounters;
-          break;
-      case GL_MAX_FRAGMENT_IMAGE_UNIFORMS:
-          *params = mCaps.maxFragmentImageUniforms;
-          break;
-      case GL_MAX_FRAGMENT_SHADER_STORAGE_BLOCKS:
-          *params = mCaps.maxFragmentShaderStorageBlocks;
-          break;
-      case GL_MIN_PROGRAM_TEXTURE_GATHER_OFFSET:
-          *params = mCaps.minProgramTextureGatherOffset;
-          break;
-      case GL_MAX_PROGRAM_TEXTURE_GATHER_OFFSET:
-          *params = mCaps.maxProgramTextureGatherOffset;
-          break;
-      case GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS:
-          *params = mCaps.maxComputeWorkGroupInvocations;
-          break;
-      case GL_MAX_COMPUTE_UNIFORM_BLOCKS:
-          *params = mCaps.maxComputeUniformBlocks;
-          break;
-      case GL_MAX_COMPUTE_TEXTURE_IMAGE_UNITS:
-          *params = mCaps.maxComputeTextureImageUnits;
-          break;
-      case GL_MAX_COMPUTE_SHARED_MEMORY_SIZE:
-          *params = mCaps.maxComputeSharedMemorySize;
-          break;
-      case GL_MAX_COMPUTE_UNIFORM_COMPONENTS:
-          *params = mCaps.maxComputeUniformComponents;
-          break;
-      case GL_MAX_COMPUTE_ATOMIC_COUNTER_BUFFERS:
-          *params = mCaps.maxComputeAtomicCounterBuffers;
-          break;
-      case GL_MAX_COMPUTE_ATOMIC_COUNTERS:
-          *params = mCaps.maxComputeAtomicCounters;
-          break;
-      case GL_MAX_COMPUTE_IMAGE_UNIFORMS:
-          *params = mCaps.maxComputeImageUniforms;
-          break;
-      case GL_MAX_COMBINED_COMPUTE_UNIFORM_COMPONENTS:
-          *params = mCaps.maxCombinedComputeUniformComponents;
-          break;
-      case GL_MAX_COMPUTE_SHADER_STORAGE_BLOCKS:
-          *params = mCaps.maxComputeShaderStorageBlocks;
-          break;
-      case GL_MAX_COMBINED_SHADER_OUTPUT_RESOURCES:
-          *params = mCaps.maxCombinedShaderOutputResources;
-          break;
-      case GL_MAX_UNIFORM_LOCATIONS:
-          *params = mCaps.maxUniformLocations;
-          break;
-      case GL_MAX_ATOMIC_COUNTER_BUFFER_BINDINGS:
-          *params = mCaps.maxAtomicCounterBufferBindings;
-          break;
-      case GL_MAX_ATOMIC_COUNTER_BUFFER_SIZE:
-          *params = mCaps.maxAtomicCounterBufferSize;
-          break;
-      case GL_MAX_COMBINED_ATOMIC_COUNTER_BUFFERS:
-          *params = mCaps.maxCombinedAtomicCounterBuffers;
-          break;
-      case GL_MAX_COMBINED_ATOMIC_COUNTERS:
-          *params = mCaps.maxCombinedAtomicCounters;
-          break;
-      case GL_MAX_IMAGE_UNITS:
-          *params = mCaps.maxImageUnits;
-          break;
-      case GL_MAX_COMBINED_IMAGE_UNIFORMS:
-          *params = mCaps.maxCombinedImageUniforms;
-          break;
-      case GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS:
-          *params = mCaps.maxShaderStorageBufferBindings;
-          break;
-      case GL_MAX_COMBINED_SHADER_STORAGE_BLOCKS:
-          *params = mCaps.maxCombinedShaderStorageBlocks;
-          break;
-      case GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT:
-          *params = mCaps.shaderStorageBufferOffsetAlignment;
-          break;
-      default:
-          mGLState.getIntegerv(mState, pname, params);
-          break;
+        // GL_EXT_disjoint_timer_query
+        case GL_GPU_DISJOINT_EXT:
+            *params = mImplementation->getGPUDisjoint();
+            break;
+        case GL_MAX_FRAMEBUFFER_WIDTH:
+            *params = mCaps.maxFramebufferWidth;
+            break;
+        case GL_MAX_FRAMEBUFFER_HEIGHT:
+            *params = mCaps.maxFramebufferHeight;
+            break;
+        case GL_MAX_FRAMEBUFFER_SAMPLES:
+            *params = mCaps.maxFramebufferSamples;
+            break;
+        case GL_MAX_SAMPLE_MASK_WORDS:
+            *params = mCaps.maxSampleMaskWords;
+            break;
+        case GL_MAX_COLOR_TEXTURE_SAMPLES:
+            *params = mCaps.maxColorTextureSamples;
+            break;
+        case GL_MAX_DEPTH_TEXTURE_SAMPLES:
+            *params = mCaps.maxDepthTextureSamples;
+            break;
+        case GL_MAX_INTEGER_SAMPLES:
+            *params = mCaps.maxIntegerSamples;
+            break;
+        case GL_MAX_VERTEX_ATTRIB_RELATIVE_OFFSET:
+            *params = mCaps.maxVertexAttribRelativeOffset;
+            break;
+        case GL_MAX_VERTEX_ATTRIB_BINDINGS:
+            *params = mCaps.maxVertexAttribBindings;
+            break;
+        case GL_MAX_VERTEX_ATTRIB_STRIDE:
+            *params = mCaps.maxVertexAttribStride;
+            break;
+        case GL_MAX_VERTEX_ATOMIC_COUNTER_BUFFERS:
+            *params = mCaps.maxVertexAtomicCounterBuffers;
+            break;
+        case GL_MAX_VERTEX_ATOMIC_COUNTERS:
+            *params = mCaps.maxVertexAtomicCounters;
+            break;
+        case GL_MAX_VERTEX_IMAGE_UNIFORMS:
+            *params = mCaps.maxVertexImageUniforms;
+            break;
+        case GL_MAX_VERTEX_SHADER_STORAGE_BLOCKS:
+            *params = mCaps.maxVertexShaderStorageBlocks;
+            break;
+        case GL_MAX_FRAGMENT_ATOMIC_COUNTER_BUFFERS:
+            *params = mCaps.maxFragmentAtomicCounterBuffers;
+            break;
+        case GL_MAX_FRAGMENT_ATOMIC_COUNTERS:
+            *params = mCaps.maxFragmentAtomicCounters;
+            break;
+        case GL_MAX_FRAGMENT_IMAGE_UNIFORMS:
+            *params = mCaps.maxFragmentImageUniforms;
+            break;
+        case GL_MAX_FRAGMENT_SHADER_STORAGE_BLOCKS:
+            *params = mCaps.maxFragmentShaderStorageBlocks;
+            break;
+        case GL_MIN_PROGRAM_TEXTURE_GATHER_OFFSET:
+            *params = mCaps.minProgramTextureGatherOffset;
+            break;
+        case GL_MAX_PROGRAM_TEXTURE_GATHER_OFFSET:
+            *params = mCaps.maxProgramTextureGatherOffset;
+            break;
+        case GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS:
+            *params = mCaps.maxComputeWorkGroupInvocations;
+            break;
+        case GL_MAX_COMPUTE_UNIFORM_BLOCKS:
+            *params = mCaps.maxComputeUniformBlocks;
+            break;
+        case GL_MAX_COMPUTE_TEXTURE_IMAGE_UNITS:
+            *params = mCaps.maxComputeTextureImageUnits;
+            break;
+        case GL_MAX_COMPUTE_SHARED_MEMORY_SIZE:
+            *params = mCaps.maxComputeSharedMemorySize;
+            break;
+        case GL_MAX_COMPUTE_UNIFORM_COMPONENTS:
+            *params = mCaps.maxComputeUniformComponents;
+            break;
+        case GL_MAX_COMPUTE_ATOMIC_COUNTER_BUFFERS:
+            *params = mCaps.maxComputeAtomicCounterBuffers;
+            break;
+        case GL_MAX_COMPUTE_ATOMIC_COUNTERS:
+            *params = mCaps.maxComputeAtomicCounters;
+            break;
+        case GL_MAX_COMPUTE_IMAGE_UNIFORMS:
+            *params = mCaps.maxComputeImageUniforms;
+            break;
+        case GL_MAX_COMBINED_COMPUTE_UNIFORM_COMPONENTS:
+            *params = mCaps.maxCombinedComputeUniformComponents;
+            break;
+        case GL_MAX_COMPUTE_SHADER_STORAGE_BLOCKS:
+            *params = mCaps.maxComputeShaderStorageBlocks;
+            break;
+        case GL_MAX_COMBINED_SHADER_OUTPUT_RESOURCES:
+            *params = mCaps.maxCombinedShaderOutputResources;
+            break;
+        case GL_MAX_UNIFORM_LOCATIONS:
+            *params = mCaps.maxUniformLocations;
+            break;
+        case GL_MAX_ATOMIC_COUNTER_BUFFER_BINDINGS:
+            *params = mCaps.maxAtomicCounterBufferBindings;
+            break;
+        case GL_MAX_ATOMIC_COUNTER_BUFFER_SIZE:
+            *params = mCaps.maxAtomicCounterBufferSize;
+            break;
+        case GL_MAX_COMBINED_ATOMIC_COUNTER_BUFFERS:
+            *params = mCaps.maxCombinedAtomicCounterBuffers;
+            break;
+        case GL_MAX_COMBINED_ATOMIC_COUNTERS:
+            *params = mCaps.maxCombinedAtomicCounters;
+            break;
+        case GL_MAX_IMAGE_UNITS:
+            *params = mCaps.maxImageUnits;
+            break;
+        case GL_MAX_COMBINED_IMAGE_UNIFORMS:
+            *params = mCaps.maxCombinedImageUniforms;
+            break;
+        case GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS:
+            *params = mCaps.maxShaderStorageBufferBindings;
+            break;
+        case GL_MAX_COMBINED_SHADER_STORAGE_BLOCKS:
+            *params = mCaps.maxCombinedShaderStorageBlocks;
+            break;
+        case GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT:
+            *params = mCaps.shaderStorageBufferOffsetAlignment;
+            break;
+        default:
+            mGLState.getIntegerv(mState, pname, params);
+            break;
     }
 }
 
@@ -3620,6 +3636,18 @@ void Context::vertexAttribPointer(GLuint index,
 {
     mGLState.setVertexAttribState(index, mGLState.getTargetBuffer(GL_ARRAY_BUFFER), size, type,
                                   normalized == GL_TRUE, false, stride, ptr);
+}
+
+void Context::setViewports(GLint count, const GLint *v)
+{
+    // TODO(Shahmeer): Either rename this function or seperate viewport and scissor sets
+    mGLState.setViewports(count, v);
+    mGLState.setScissors(count, v);
+}
+
+void Context::enableMultiview(GLint count)
+{
+    mGLState.enableMultiview(count);
 }
 
 void Context::vertexAttribFormat(GLuint attribIndex,

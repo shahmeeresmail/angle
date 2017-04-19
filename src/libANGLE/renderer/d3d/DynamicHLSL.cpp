@@ -162,6 +162,9 @@ std::string DynamicHLSL::generateVertexShaderForInputLayout(
                      << "    float2 spriteTexCoord : SPRITETEXCOORD0;\n";
     }
 
+    bool shaderUsesMultiview  = false;
+    bool shaderUsesInstancing = false;
+
     for (size_t attributeIndex = 0; attributeIndex < shaderAttributes.size(); ++attributeIndex)
     {
         const sh::Attribute &shaderAttribute = shaderAttributes[attributeIndex];
@@ -172,69 +175,108 @@ std::string DynamicHLSL::generateVertexShaderForInputLayout(
                 inputIndex < inputLayout.size() ? inputLayout[inputIndex] : VERTEX_FORMAT_INVALID;
 
             // HLSL code for input structure
-            if (IsMatrixType(shaderAttribute.type))
+            if (shaderAttribute.name == "gl_ViewID_OVR")
             {
-                // Matrix types are always transposed
-                structStream << "    "
-                             << HLSLMatrixTypeString(TransposeMatrixType(shaderAttribute.type));
+                shaderUsesMultiview = true;
             }
             else
             {
-                GLenum componentType = mRenderer->getVertexComponentType(vertexFormatType);
-
-                if (shaderAttribute.name == "gl_InstanceID" ||
-                    shaderAttribute.name == "gl_VertexID")
+                if (IsMatrixType(shaderAttribute.type))
                 {
-                    // The input types of the instance ID and vertex ID in HLSL (uint) differs from
-                    // the ones in ESSL (int).
-                    structStream << " uint";
+                    // Matrix types are always transposed
+                    structStream << "    "
+                                 << HLSLMatrixTypeString(TransposeMatrixType(shaderAttribute.type));
                 }
                 else
                 {
-                    structStream << "    " << HLSLComponentTypeString(
-                                                  componentType,
-                                                  VariableComponentCount(shaderAttribute.type));
+                    GLenum componentType = mRenderer->getVertexComponentType(vertexFormatType);
+
+                    if (shaderAttribute.name == "gl_InstanceID" ||
+                        shaderAttribute.name == "gl_VertexID")
+                    {
+                        // The input types of the instance ID and vertex ID in HLSL (uint) differs
+                        // from
+                        // the ones in ESSL (int).
+                        structStream << " uint";
+                    }
+                    else
+                    {
+                        structStream << "    " << HLSLComponentTypeString(
+                                                      componentType,
+                                                      VariableComponentCount(shaderAttribute.type));
+                    }
+                }
+
+                if (shaderAttribute.name == "gl_InstanceID")
+                {
+                    // TODO: Make this consistent with how gl_ViewID_OVR is handled
+                    shaderUsesInstancing = true;
+                    structStream << " " << decorateVariable(shaderAttribute.name)
+                                 << " : SV_InstanceID;\n";
+                }
+                else
+                {
+                    structStream << " " << decorateVariable(shaderAttribute.name) << " : ";
+
+                    if (shaderAttribute.name == "gl_VertexID")
+                    {
+                        structStream << "SV_VertexID";
+                    }
+                    else
+                    {
+                        structStream << "TEXCOORD" << semanticIndex;
+                        semanticIndex += VariableRegisterCount(shaderAttribute.type);
+                    }
+
+                    structStream << ";\n";
+
+                    // HLSL code for initialization
+                    initStream << "    " << decorateVariable(shaderAttribute.name) << " = ";
+
+                    // Mismatched vertex attribute to vertex input may result in an undefined
+                    // data reinterpretation (eg for pure integer->float, float->pure integer)
+                    // TODO: issue warning with gl debug info extension, when supported
+                    if (IsMatrixType(shaderAttribute.type) ||
+                        (mRenderer->getVertexConversionType(vertexFormatType) &
+                         VERTEX_CONVERT_GPU) != 0)
+                    {
+                        initStream
+                            << generateAttributeConversionHLSL(vertexFormatType, shaderAttribute);
+                    }
+                    else
+                    {
+                        initStream << "input." << decorateVariable(shaderAttribute.name);
+                    }
+
+                    initStream << ";\n";
                 }
             }
 
-            structStream << " " << decorateVariable(shaderAttribute.name) << " : ";
-
-            if (shaderAttribute.name == "gl_InstanceID")
-            {
-                structStream << "SV_InstanceID";
-            }
-            else if (shaderAttribute.name == "gl_VertexID")
-            {
-                structStream << "SV_VertexID";
-            }
-            else
-            {
-                structStream << "TEXCOORD" << semanticIndex;
-                semanticIndex += VariableRegisterCount(shaderAttribute.type);
-            }
-
-            structStream << ";\n";
-
-            // HLSL code for initialization
-            initStream << "    " << decorateVariable(shaderAttribute.name) << " = ";
-
-            // Mismatched vertex attribute to vertex input may result in an undefined
-            // data reinterpretation (eg for pure integer->float, float->pure integer)
-            // TODO: issue warning with gl debug info extension, when supported
-            if (IsMatrixType(shaderAttribute.type) ||
-                (mRenderer->getVertexConversionType(vertexFormatType) & VERTEX_CONVERT_GPU) != 0)
-            {
-                initStream << generateAttributeConversionHLSL(vertexFormatType, shaderAttribute);
-            }
-            else
-            {
-                initStream << "input." << decorateVariable(shaderAttribute.name);
-            }
-
-            initStream << ";\n";
-
             inputIndex += VariableRowCount(TransposeMatrixType(shaderAttribute.type));
         }
+    }
+
+    if (shaderUsesInstancing)
+    {
+        if (shaderUsesMultiview)
+        {
+            // TODO (Shahmeer): Handle viewcount other than 2
+            // Instance count is doubled in drawCall to account for multiple (2) views, so reduce
+            // instanceID by factor of 2 to allow shader operation
+            initStream << "gl_InstanceID = input.gl_InstanceID / 2;\n";
+            // Map ViewID to modulo 2 of Instance ID
+            initStream << "gl_ViewID_OVR = input.gl_InstanceID % 2;\n";
+        }
+        else
+        {
+            initStream << "gl_InstanceID = input.gl_InstanceID;\n";
+        }
+    }
+    else if (shaderUsesMultiview)
+    {
+        // ViewID can be mapped directly to SV_InstanceID
+        structStream << " uint gl_ViewID_OVR : SV_InstanceID;\n";
+        initStream << "gl_ViewID_OVR = input.gl_ViewID_OVR;\n";
     }
 
     structStream << "};\n"
@@ -325,11 +367,12 @@ std::string DynamicHLSL::generatePixelShaderForOutputSignature(
 void DynamicHLSL::generateVaryingLinkHLSL(const VaryingPacking &varyingPacking,
                                           const BuiltinInfo &builtins,
                                           bool programUsesPointSize,
-                                          std::stringstream &hlslStream) const
+                                          std::stringstream &hlslStream,
+                                          bool inLinkage) const
 {
+
     ASSERT(builtins.dxPosition.enabled);
-    hlslStream << "{\n"
-               << "    float4 dx_Position : " << builtins.dxPosition.str() << ";\n";
+    hlslStream << "    float4 dx_Position : " << builtins.dxPosition.str() << ";\n";
 
     if (builtins.glPosition.enabled)
     {
@@ -388,8 +431,6 @@ void DynamicHLSL::generateVaryingLinkHLSL(const VaryingPacking &varyingPacking,
         unsigned int semanticIndex = registerInfo.semanticIndex;
         hlslStream << " v" << semanticIndex << " : " << varyingSemantic << semanticIndex << ";\n";
     }
-
-    hlslStream << "};\n";
 }
 
 void DynamicHLSL::generateShaderLinkHLSL(const gl::ContextState &data,
@@ -413,6 +454,9 @@ void DynamicHLSL::generateShaderLinkHLSL(const gl::ContextState &data,
     bool useInstancedPointSpriteEmulation =
         programMetadata.usesPointSize() &&
         mRenderer->getWorkarounds().useInstancedPointSpriteEmulation;
+    const bool usesViewId = programMetadata.usesViewID();
+    const bool passViewIdToGs =
+        (mRenderer->canWriteVpRtIndexFromVs() == false) && (usesViewId == true);
 
     // Validation done in the compiler
     ASSERT(!fragmentShader->usesFragColor() || !fragmentShader->usesFragData());
@@ -437,8 +481,17 @@ void DynamicHLSL::generateShaderLinkHLSL(const gl::ContextState &data,
 
     // Write the HLSL input/output declarations
     vertexStream << "struct VS_OUTPUT\n";
+    vertexStream << "{\n";
     generateVaryingLinkHLSL(varyingPacking, vertexBuiltins, builtinsD3D.usesPointSize(),
-                            vertexStream);
+                            vertexStream, false);
+
+    if (vertexBuiltins.glViewIdOvr.enabled == true)
+    {
+        vertexStream << "    uint gl_ViewID_OVR : " << vertexBuiltins.glViewIdOvr.str() << ";\n";
+    }
+
+    vertexStream << "};\n";
+
     vertexStream << "\n"
                  << "VS_OUTPUT main(VS_INPUT input)\n"
                  << "{\n"
@@ -506,6 +559,11 @@ void DynamicHLSL::generateShaderLinkHLSL(const gl::ContextState &data,
     if (vertexBuiltins.glFragCoord.enabled)
     {
         vertexStream << "    output.gl_FragCoord = gl_Position;\n";
+    }
+
+    if (vertexBuiltins.glViewIdOvr.enabled)
+    {
+        vertexStream << "    output.gl_ViewID_OVR = gl_ViewID_OVR;\n";
     }
 
     for (const PackedVaryingRegister &registerInfo : varyingPacking.getRegisterList())
@@ -588,8 +646,11 @@ void DynamicHLSL::generateShaderLinkHLSL(const gl::ContextState &data,
     std::stringstream pixelStream;
     pixelStream << fragmentShaderGL->getTranslatedSource();
     pixelStream << "struct PS_INPUT\n";
-    generateVaryingLinkHLSL(varyingPacking, pixelBuiltins, builtinsD3D.usesPointSize(),
-                            pixelStream);
+    pixelStream << "{\n";
+    generateVaryingLinkHLSL(varyingPacking, pixelBuiltins, builtinsD3D.usesPointSize(), pixelStream,
+                            true);
+    pixelStream << "};\n";
+
     pixelStream << "\n";
 
     pixelStream << std::string(PIXEL_OUTPUT_STUB_STRING) << "\n";
@@ -850,14 +911,33 @@ std::string DynamicHLSL::generateGeometryShaderPreamble(const VaryingPacking &va
     std::stringstream preambleStream;
 
     const auto &vertexBuiltins = builtinsD3D[SHADER_VERTEX];
+    const bool outputViewId    = builtinsD3D[SHADER_GEOMETRY].glViewIdOvr.enabled;
 
     preambleStream << "struct GS_INPUT\n";
+    preambleStream << "{\n";
     generateVaryingLinkHLSL(varyingPacking, vertexBuiltins, builtinsD3D.usesPointSize(),
-                            preambleStream);
+                            preambleStream, true);
+
+    if (outputViewId == true)
+    {
+        preambleStream << "    uint gl_ViewID_OVR : " << vertexBuiltins.glViewIdOvr.str() << ";\n";
+    }
+
+    preambleStream << "};\n";
+
     preambleStream << "\n"
                    << "struct GS_OUTPUT\n";
+    preambleStream << "{\n";
     generateVaryingLinkHLSL(varyingPacking, builtinsD3D[SHADER_GEOMETRY],
-                            builtinsD3D.usesPointSize(), preambleStream);
+                            builtinsD3D.usesPointSize(), preambleStream, false);
+
+    if (outputViewId)
+    {
+        preambleStream << "    uint gl_ViewID_OVR : "
+                       << builtinsD3D[SHADER_GEOMETRY].glViewIdOvr.str() << ";\n";
+    }
+
+    preambleStream << "};\n";
     preambleStream
         << "\n"
         << "void copyVertex(inout GS_OUTPUT output, GS_INPUT input, GS_INPUT flatinput)\n"
@@ -887,8 +967,9 @@ std::string DynamicHLSL::generateGeometryShaderPreamble(const VaryingPacking &va
     // Only write the dx_Position if we aren't using point sprites
     preambleStream << "#ifndef ANGLE_POINT_SPRITE_SHADER\n"
                    << "    output.dx_Position = input.dx_Position;\n"
-                   << "#endif  // ANGLE_POINT_SPRITE_SHADER\n"
-                   << "}\n";
+                   << "#endif  // ANGLE_POINT_SPRITE_SHADER\n";
+
+    preambleStream << "}\n";
 
     return preambleStream.str();
 }
@@ -897,7 +978,8 @@ std::string DynamicHLSL::generateGeometryShaderHLSL(gl::PrimitiveType primitiveT
                                                     const gl::ContextState &data,
                                                     const gl::ProgramState &programData,
                                                     const bool useViewScale,
-                                                    const std::string &preambleString) const
+                                                    const std::string &preambleString,
+                                                    const bool usesViewID) const
 {
     ASSERT(mRenderer->getMajorShaderModel() >= 4);
 
@@ -905,6 +987,7 @@ std::string DynamicHLSL::generateGeometryShaderHLSL(gl::PrimitiveType primitiveT
 
     const bool pointSprites   = (primitiveType == PRIMITIVE_POINTS);
     const bool usesPointCoord = preambleString.find("gl_PointCoord") != std::string::npos;
+    const bool outputViewID   = usesViewID && (mRenderer->canWriteVpRtIndexFromVs() == false);
 
     const char *inputPT  = nullptr;
     const char *outputPT = nullptr;
@@ -1006,6 +1089,14 @@ std::string DynamicHLSL::generateGeometryShaderHLSL(gl::PrimitiveType primitiveT
         shaderStream << "    copyVertex(output, input[" << vertexIndex
                      << "], input[lastVertexIndex]);\n";
 
+        // Revisit(Shahmeer):  Determine if this should only be set for first vertex (like below)
+        // or for all vertices
+
+        if (outputViewID == true && vertexIndex == 0)
+        {
+            shaderStream << "    output.gl_ViewID_OVR = input[0].gl_ViewID_OVR;\n";
+        }
+
         if (!pointSprites)
         {
             ASSERT(inputSize == maxVertexOutput);
@@ -1049,8 +1140,9 @@ std::string DynamicHLSL::generateGeometryShaderHLSL(gl::PrimitiveType primitiveT
         }
     }
 
+    // Debug(Shahmeer): Evaluate whether restartStrip can be removed for all prims except triStrips
     shaderStream << "    \n"
-                    "    outStream.RestartStrip();\n"
+                    //"    outStream.RestartStrip();\n"
                     "}\n";
 
     return shaderStream.str();
@@ -1197,8 +1289,11 @@ void BuiltinVaryingsD3D::updateBuiltins(ShaderType shaderType,
     unsigned int reservedSemanticIndex = packing.getMaxSemanticIndex();
 
     BuiltinInfo *builtins = &mBuiltinInfo[shaderType];
+    const bool sm4OrHigher             = metadata.getRendererMajorShaderModel() >= 4;
+    const bool viewID                  = metadata.usesViewID();
+    const bool canWriteVpRtIndexFromVs = metadata.canWriteVpRtIndexFromVs();
 
-    if (metadata.getRendererMajorShaderModel() >= 4)
+    if (sm4OrHigher)
     {
         builtins->dxPosition.enableSystem("SV_Position");
     }
@@ -1241,6 +1336,28 @@ void BuiltinVaryingsD3D::updateBuiltins(ShaderType shaderType,
         (shaderType != SHADER_PIXEL || metadata.getRendererMajorShaderModel() >= 4))
     {
         builtins->glPointSize.enableSystem("PSIZE");
+    }
+
+    if (viewID && sm4OrHigher)
+    {
+        if (canWriteVpRtIndexFromVs)
+        {
+            if (shaderType == SHADER_VERTEX)
+            {
+                builtins->glViewIdOvr.enableSystem("SV_ViewportArrayIndex");
+            }
+        }
+        else
+        {
+            if (shaderType == SHADER_VERTEX)
+            {
+                builtins->glViewIdOvr.enable("LAYER", 0);
+            }
+            else if (shaderType == SHADER_GEOMETRY)
+            {
+                builtins->glViewIdOvr.enableSystem("SV_ViewportArrayIndex");
+            }
+        }
     }
 }
 

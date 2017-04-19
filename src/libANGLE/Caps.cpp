@@ -215,7 +215,8 @@ Extensions::Extensions()
       pathRendering(false),
       surfacelessContext(false),
       clientArrays(false),
-      robustResourceInitialization(false)
+      robustResourceInitialization(false),
+      multiView(false)
 {
 }
 
@@ -647,6 +648,7 @@ const ExtensionInfoMap &GetExtensionInfoMap()
         map["GL_CHROMIUM_framebuffer_mixed_samples"] = esOnlyExtension(&Extensions::framebufferMixedSamples);
         map["GL_EXT_texture_norm16"] = esOnlyExtension(&Extensions::textureNorm16);
         map["GL_CHROMIUM_path_rendering"] = esOnlyExtension(&Extensions::pathRendering);
+        map["GL_OVR_multiview"] = esOnlyExtension(&Extensions::multiView);
         map["GL_OES_surfaceless_context"] = esOnlyExtension(&Extensions::surfacelessContext);
         map["GL_ANGLE_client_arrays"] = esOnlyExtension(&Extensions::clientArrays);
         map["GL_ANGLE_robust_resource_initialization"] = esOnlyExtension(&Extensions::robustResourceInitialization);
@@ -797,7 +799,9 @@ Caps::Caps()
       maxTransformFeedbackSeparateComponents(0),
 
       // Table 20.49
-      maxSamples(0)
+      maxSamples(0),
+
+      maxViewsOvr(0)
 
 {
     for (size_t i = 0; i < 3; ++i)

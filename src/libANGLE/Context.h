@@ -159,6 +159,7 @@ class Context final : public ValidationContext
     void bindPixelPackBuffer(GLuint bufferHandle);
     void bindPixelUnpackBuffer(GLuint bufferHandle);
     void useProgram(GLuint program);
+    void linkProgram(Program *program);
     void bindTransformFeedback(GLuint transformFeedbackHandle);
     void bindDrawIndirectBuffer(GLuint bufferHandle);
 
@@ -300,6 +301,8 @@ class Context final : public ValidationContext
                               GLsizei stride,
                               const GLvoid *pointer);
     void viewport(GLint x, GLint y, GLsizei width, GLsizei height);
+    void setViewports(GLint count, const GLint *v);
+    void enableMultiview(GLint count);
 
     void vertexAttribI4i(GLuint index, GLint x, GLint y, GLint z, GLint w);
     void vertexAttribI4ui(GLuint index, GLuint x, GLuint y, GLuint z, GLuint w);

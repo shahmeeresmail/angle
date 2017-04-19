@@ -60,10 +60,14 @@ State::State()
       mVertexArray(nullptr),
       mActiveSampler(0),
       mPrimitiveRestart(false),
+      mMultiviewMode(false),
       mMultiSampling(false),
       mSampleAlphaToOne(false),
       mFramebufferSRGB(true),
-      mRobustResourceInit(false)
+      mRobustResourceInit(false),
+      mViewportArrayCount(1),
+      mScissorArrayCount(1),
+      mViewCount(2)
 {
 }
 
@@ -97,10 +101,14 @@ void State::initialize(const Caps &caps,
     mRasterizer.pointDrawMode = false;
     mRasterizer.multiSample = false;
     mScissorTest = false;
-    mScissor.x = 0;
-    mScissor.y = 0;
-    mScissor.width = 0;
-    mScissor.height = 0;
+    mScissorArray[0].x              = 0;
+    mScissorArray[0].y              = 0;
+    mScissorArray[0].width          = 0;
+    mScissorArray[0].height         = 0;
+    mScissorArray[1].x              = 0;
+    mScissorArray[1].y              = 0;
+    mScissorArray[1].width          = 0;
+    mScissorArray[1].height         = 0;
 
     mBlend.blend = false;
     mBlend.sourceBlendRGB = GL_ONE;
@@ -148,10 +156,14 @@ void State::initialize(const Caps &caps,
 
     mLineWidth = 1.0f;
 
-    mViewport.x = 0;
-    mViewport.y = 0;
-    mViewport.width = 0;
-    mViewport.height = 0;
+    mViewportArray[0].x      = 0;
+    mViewportArray[0].y      = 0;
+    mViewportArray[0].width  = 0;
+    mViewportArray[0].height = 0;
+    mViewportArray[1].x      = 0;
+    mViewportArray[1].y      = 0;
+    mViewportArray[1].width  = 0;
+    mViewportArray[1].height = 0;
     mNearZ = 0.0f;
     mFarZ = 1.0f;
 
@@ -605,18 +617,95 @@ void State::setScissorTest(bool enabled)
     mDirtyBits.set(DIRTY_BIT_SCISSOR_TEST_ENABLED);
 }
 
+void State::setScissors(GLint count, const GLint *v)
+{
+    if ((count < 0) || (count > IMPLEMENTATION_MAX_VIEWPORT_SCISSOR_RECTS))
+    {
+        assert(0);
+        return;
+    }
+
+    for (int i = 0; i < count; i++)
+    {
+        memcpy(&(mScissorArray[i].x), &(v[4 * i]), sizeof(int) * 4);
+    }
+
+    mScissorArrayCount = count;
+
+    mDirtyBits.set(DIRTY_BIT_SCISSOR);
+}
+
 void State::setScissorParams(GLint x, GLint y, GLsizei width, GLsizei height)
 {
-    mScissor.x = x;
-    mScissor.y = y;
-    mScissor.width = width;
-    mScissor.height = height;
+    GLint xx = x;
+    GLint yy = y;
+    if (((x & MULTIVIEW_XY_SIGNATURE_MASK) == MULTIVIEW_XY_SIGNATURE) &&
+        ((y & MULTIVIEW_XY_SIGNATURE_MASK) == MULTIVIEW_XY_SIGNATURE))
+    {
+        xx &= ~MULTIVIEW_XY_SIGNATURE_MASK;
+        yy &= ~MULTIVIEW_XY_SIGNATURE_MASK;
+
+        mScissorArray[0].x      = xx;
+        mScissorArray[0].y      = yy;
+        mScissorArray[0].width  = width;
+        mScissorArray[0].height = height;
+
+        mScissorArray[1].x      = xx + width;
+        mScissorArray[1].y      = yy;
+        mScissorArray[1].width  = width;
+        mScissorArray[1].height = height;
+
+        mScissorArrayCount = 2;
+    }
+    else
+    {
+        mScissorArray[0].x      = xx;
+        mScissorArray[0].y      = yy;
+        mScissorArray[0].width  = width;
+        mScissorArray[0].height = height;
+        mScissorArrayCount      = 1;
+    }
+
     mDirtyBits.set(DIRTY_BIT_SCISSOR);
 }
 
 const Rectangle &State::getScissor() const
 {
-    return mScissor;
+    return mScissorArray[0];
+}
+
+const Rectangle State::getUnionOfScissors() const
+{
+    Rectangle scissorUnion;
+
+    if (mScissorArrayCount == 1)
+    {
+        scissorUnion = mScissorArray[0];
+    }
+    else
+    {
+        assert(mScissorArrayCount == 2);
+        scissorUnion.x     = std::min(mScissorArray[0].x, mScissorArray[1].x);
+        scissorUnion.y     = std::min(mScissorArray[0].y, mScissorArray[1].y);
+        scissorUnion.width = std::max(mScissorArray[0].x + mScissorArray[0].width,
+                                      mScissorArray[1].x + mScissorArray[1].width) -
+                             scissorUnion.x;
+        scissorUnion.height = std::max(mScissorArray[0].y + mScissorArray[0].height,
+                                       mScissorArray[1].y + mScissorArray[1].height) -
+                              scissorUnion.y;
+    }
+
+    return scissorUnion;
+}
+
+const Rectangle *State::getScissors() const
+{
+    return &mScissorArray[0];
+}
+
+const int State::getScissorCount() const
+{
+    return mScissorArrayCount;
 }
 
 bool State::isDitherEnabled() const
@@ -752,16 +841,99 @@ bool State::areClientArraysEnabled() const
 
 void State::setViewportParams(GLint x, GLint y, GLsizei width, GLsizei height)
 {
-    mViewport.x = x;
-    mViewport.y = y;
-    mViewport.width = width;
-    mViewport.height = height;
+    GLint xx = x;
+    GLint yy = y;
+
+    if (((x & MULTIVIEW_XY_SIGNATURE_MASK) == MULTIVIEW_XY_SIGNATURE) &&
+        ((y & MULTIVIEW_XY_SIGNATURE_MASK) == MULTIVIEW_XY_SIGNATURE))
+    {
+        // glMultiViewEnableEXT(true);
+
+        xx &= ~MULTIVIEW_XY_SIGNATURE_MASK;
+        yy &= ~MULTIVIEW_XY_SIGNATURE_MASK;
+
+        mViewportArray[0].x      = xx;
+        mViewportArray[0].y      = yy;
+        mViewportArray[0].width  = width;
+        mViewportArray[0].height = height;
+
+        // This assumes that the second viewport is immediately to the right of the first
+        mViewportArray[1].x      = xx + width;
+        mViewportArray[1].y      = yy;
+        mViewportArray[1].width  = width;
+        mViewportArray[1].height = height;
+
+        mViewportArrayCount = 2;
+    }
+    else
+    {
+        mViewportArray[0].x      = xx;
+        mViewportArray[0].y      = yy;
+        mViewportArray[0].width  = width;
+        mViewportArray[0].height = height;
+        mViewportArrayCount      = 1;
+    }
+
     mDirtyBits.set(DIRTY_BIT_VIEWPORT);
 }
 
-const Rectangle &State::getViewport() const
+void State::setViewports(GLint count, const GLint *v)
 {
-    return mViewport;
+    if ((count < 0) || (count > IMPLEMENTATION_MAX_VIEWPORT_SCISSOR_RECTS))
+    {
+        assert(0);
+        return;
+    }
+
+    for (int i = 0; i < count; i++)
+    {
+        memcpy(&(mViewportArray[i].x), &(v[4 * i]), sizeof(int) * 4);
+    }
+
+    mViewportArrayCount = count;
+
+    mDirtyBits.set(DIRTY_BIT_VIEWPORT);
+}
+
+const Rectangle &State::getViewport(GLint index) const
+{
+    return mViewportArray[index];
+}
+
+const int State::getViewportCount() const
+{
+    return mViewportArrayCount;
+}
+
+const Rectangle *State::getViewports() const
+{
+    return &mViewportArray[0];
+}
+
+const void State::enableMultiview(GLint count)
+{
+    if (count > 1 && count <= IMPLEMENTATION_MAX_VIEWPORT_SCISSOR_RECTS)
+    {
+        mMultiviewMode = GL_MULTIVIEW_AUTO_OVR;
+        mViewCount     = count;
+    }
+    else
+    {
+        mMultiviewMode = GL_MULTIVIEW_DISABLED_OVR;
+        mViewCount     = 1;
+    }
+}
+
+const int State::getNumViews() const
+{
+    // assert(mViewCount == mViewportArrayCount);
+    return ((mMultiviewMode != GL_MULTIVIEW_DISABLED_OVR) ? mViewCount : 1);
+}
+
+const int State::getMultiviewMode() const
+{
+    // assert(mViewCount == mViewportArrayCount);
+    return mMultiviewMode;
 }
 
 void State::setActiveSampler(unsigned int active)
@@ -1102,6 +1274,16 @@ void State::setProgram(const Context *context, Program *newProgram)
         {
             newProgram->addRef();
         }
+
+        mDirtyBits.set(DIRTY_BIT_PROGRAM_BINDING);
+    }
+}
+
+void State::syncNewlyLinkedProgram(Program *program)
+{
+    if (mProgram == program)
+    {
+        mDirtyBits.set(DIRTY_BIT_PROGRAM_BINDING);
     }
 }
 
@@ -1825,17 +2007,23 @@ void State::getIntegerv(const ContextState &data, GLenum pname, GLint *params)
         }
         break;
       case GL_VIEWPORT:
-        params[0] = mViewport.x;
-        params[1] = mViewport.y;
-        params[2] = mViewport.width;
-        params[3] = mViewport.height;
-        break;
+          // TODO(Shahmeer): Properly handle multiple viewports. Right now, assumes both have the
+          // same size and are side-by-side viewports with viewport0 on left
+          //      For now, return union of viewports
+          params[0] = mViewportArray[0].x;
+          params[1] = mViewportArray[0].y;
+          params[2] = mViewportArray[0].width * mViewportArrayCount;
+          params[3] = mViewportArray[0].height;
+          break;
       case GL_SCISSOR_BOX:
-        params[0] = mScissor.x;
-        params[1] = mScissor.y;
-        params[2] = mScissor.width;
-        params[3] = mScissor.height;
-        break;
+          // TODO(Shahmeer): Properly handle multiple scissors. Right now, assumes both have the
+          // same size and are side-by-side scissors with scissor0 on left
+          //      For now, return union of scissors
+          params[0] = mScissorArray[0].x;
+          params[1] = mScissorArray[0].y;
+          params[2] = mScissorArray[0].width * mScissorArrayCount;
+          params[3] = mScissorArray[0].height;
+          break;
       case GL_CULL_FACE_MODE:                   *params = mRasterizer.cullMode;   break;
       case GL_FRONT_FACE:                       *params = mRasterizer.frontFace;  break;
       case GL_RED_BITS:

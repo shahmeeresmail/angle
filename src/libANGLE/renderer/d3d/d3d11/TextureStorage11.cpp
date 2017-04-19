@@ -714,7 +714,8 @@ TextureStorage11_2D::TextureStorage11_2D(Renderer11 *renderer, SwapChain11 *swap
       mLevelZeroTexture(nullptr),
       mLevelZeroRenderTarget(nullptr),
       mUseLevelZeroTexture(false),
-      mSwizzleTexture(nullptr)
+      mSwizzleTexture(nullptr),
+      mStagingSwizzleTexture(nullptr)
 {
     mTexture->AddRef();
 
@@ -754,7 +755,8 @@ TextureStorage11_2D::TextureStorage11_2D(Renderer11 *renderer,
       mLevelZeroTexture(nullptr),
       mLevelZeroRenderTarget(nullptr),
       mUseLevelZeroTexture(hintLevelZeroOnly && levels > 1),
-      mSwizzleTexture(nullptr)
+      mSwizzleTexture(nullptr),
+      mStagingSwizzleTexture(nullptr)
 {
     for (unsigned int i = 0; i < gl::IMPLEMENTATION_MAX_TEXTURE_LEVELS; i++)
     {
@@ -798,6 +800,7 @@ TextureStorage11_2D::~TextureStorage11_2D()
 
     SafeRelease(mTexture);
     SafeRelease(mSwizzleTexture);
+    SafeRelease(mStagingSwizzleTexture);
 
     SafeRelease(mLevelZeroTexture);
     SafeDelete(mLevelZeroRenderTarget);

@@ -76,6 +76,7 @@ struct BuiltinInfo
     BuiltinVarying glFragCoord;
     BuiltinVarying glPointCoord;
     BuiltinVarying glPointSize;
+    BuiltinVarying glViewIdOvr;
 };
 
 inline std::string GetVaryingSemantic(int majorShaderModel, bool programUsesPointSize)
@@ -133,7 +134,8 @@ class DynamicHLSL : angle::NonCopyable
                                            const gl::ContextState &data,
                                            const gl::ProgramState &programData,
                                            const bool useViewScale,
-                                           const std::string &preambleString) const;
+                                           const std::string &preambleString,
+                                           const bool usesViewID) const;
 
     void getPixelShaderOutputKey(const gl::ContextState &data,
                                  const gl::ProgramState &programData,
@@ -146,7 +148,8 @@ class DynamicHLSL : angle::NonCopyable
     void generateVaryingLinkHLSL(const gl::VaryingPacking &varyingPacking,
                                  const BuiltinInfo &builtins,
                                  bool programUsesPointSize,
-                                 std::stringstream &hlslStream) const;
+                                 std::stringstream &hlslStream,
+                                 bool inLinkage) const;
 
     // Prepend an underscore
     static std::string decorateVariable(const std::string &name);

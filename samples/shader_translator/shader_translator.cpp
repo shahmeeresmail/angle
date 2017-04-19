@@ -206,6 +206,7 @@ int main(int argc, char *argv[])
                       case 'n': resources.NV_shader_framebuffer_fetch = 1; break;
                       case 'a': resources.ARM_shader_framebuffer_fetch = 1; break;
                       case 'm':
+                          // TOOD (Shahmeer): Determine how this point is reached
                           resources.OVR_multiview = 1;
                           compileOptions |= SH_TRANSLATE_VIEWID_OVR_TO_UNIFORM;
                           break;

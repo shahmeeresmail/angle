@@ -1180,6 +1180,8 @@ void GenerateCaps(ID3D11Device *device, ID3D11DeviceContext *deviceContext, cons
     caps->maxViewportWidth  = static_cast<GLuint>(GetMaximumViewportSize(featureLevel));
     caps->maxViewportHeight = caps->maxViewportWidth;
 
+    caps->maxViewsOvr = D3D10_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE;
+
     // Choose a reasonable maximum, enforced in the shader.
     caps->minAliasedPointSize = 1.0f;
     caps->maxAliasedPointSize = 1024.0f;
@@ -1339,6 +1341,7 @@ void GenerateCaps(ID3D11Device *device, ID3D11DeviceContext *deviceContext, cons
     extensions->lossyETCDecode           = true;
     extensions->syncQuery                 = GetEventQuerySupport(featureLevel);
     extensions->copyTexture               = true;
+    extensions->multiView                 = true;
     extensions->copyCompressedTexture     = true;
 
     // D3D11 Feature Level 10_0+ uses SV_IsFrontFace in HLSL to emulate gl_FrontFacing.
@@ -1968,6 +1971,10 @@ angle::WorkaroundsD3D GenerateWorkarounds(const Renderer11DeviceCaps &deviceCaps
     workarounds.setDataFasterThanImageUpload = true;
     workarounds.zeroMaxLodWorkaround             = is9_3;
     workarounds.useInstancedPointSpriteEmulation = is9_3;
+    workarounds.autoCreateSbsViewsForMultiview   = true;
+    workarounds.multiviewStereoViews             = true;
+    workarounds.forceMultiviewSbs                = true;
+    workarounds.multiviewEnabledWithViewIDUsage  = true;
 
     // TODO(jmadill): Narrow problematic driver range.
     if (IsNvidia(adapterDesc.VendorId))

@@ -408,6 +408,7 @@ Renderer11::Renderer11(egl::Display *display)
 
     mRenderer11DeviceCaps.supportsClearView             = false;
     mRenderer11DeviceCaps.supportsConstantBufferOffsets = false;
+    mRenderer11DeviceCaps.supportsVpRtIndexWriteFromVs  = false;
     mRenderer11DeviceCaps.supportsDXGI1_2               = false;
     mRenderer11DeviceCaps.B5G6R5support                 = 0;
     mRenderer11DeviceCaps.B4G4R4A4support               = 0;
@@ -420,8 +421,10 @@ Renderer11::Renderer11(egl::Display *display)
     mEGLDevice            = nullptr;
 
     mDevice         = NULL;
+    mDevice3        = NULL;
     mDeviceContext  = NULL;
     mDeviceContext1 = NULL;
+    mDeviceContext3 = NULL;
     mDxgiAdapter    = NULL;
     mDxgiFactory    = NULL;
 
@@ -449,6 +452,7 @@ Renderer11::Renderer11(egl::Display *display)
         {
             if (requestedMinorVersion == EGL_DONT_CARE || requestedMinorVersion >= 0)
             {
+                mAvailableFeatureLevels.push_back(D3D_FEATURE_LEVEL_11_1);
                 mAvailableFeatureLevels.push_back(D3D_FEATURE_LEVEL_11_0);
             }
         }
@@ -582,6 +586,12 @@ egl::Error Renderer11::initialize()
         // This could fail on Windows 7 without the Platform Update.
         // Don't error in this case- just don't use mDeviceContext1.
         mDeviceContext1 = d3d11::DynamicCastComObject<ID3D11DeviceContext1>(mDeviceContext);
+
+        if (IsWindows10OrGreater() == true)
+        {
+            mDevice3        = d3d11::DynamicCastComObject<ID3D11Device3>(mDevice);
+            mDeviceContext3 = d3d11::DynamicCastComObject<ID3D11DeviceContext3>(mDeviceContext);
+        }
 
         IDXGIDevice *dxgiDevice = NULL;
         result = mDevice->QueryInterface(__uuidof(IDXGIDevice), (void **)&dxgiDevice);
@@ -883,6 +893,18 @@ void Renderer11::populateRenderer11DeviceCaps()
             mRenderer11DeviceCaps.supportsClearView = (d3d11Options.ClearView != FALSE);
             mRenderer11DeviceCaps.supportsConstantBufferOffsets =
                 (d3d11Options.ConstantBufferOffsetting != FALSE);
+        }
+
+        if (mDevice3)
+        {
+            D3D11_FEATURE_DATA_D3D11_OPTIONS3 d3d11Options3;
+            result = mDevice3->CheckFeatureSupport(D3D11_FEATURE_D3D11_OPTIONS3, &d3d11Options3,
+                                                   sizeof(D3D11_FEATURE_DATA_D3D11_OPTIONS3));
+            if (SUCCEEDED(result))
+            {
+                mRenderer11DeviceCaps.supportsVpRtIndexWriteFromVs =
+                    d3d11Options3.VPAndRTArrayIndexFromAnyShaderFeedingRasterizer == TRUE;
+            }
         }
     }
 
@@ -1608,11 +1630,21 @@ gl::Error Renderer11::updateState(const gl::ContextState &data, GLenum drawMode)
     mStateManager.updatePresentPath(presentPathFastActive, firstColorAttachment);
 
     // Setting viewport state
-    mStateManager.setViewport(&data.getCaps(), glState.getViewport(), glState.getNearPlane(),
-                              glState.getFarPlane());
+    if (mRenderer11DeviceCaps.featureLevel > D3D_FEATURE_LEVEL_9_3)
+    {
+        GLint defaultWidth = framebuffer->getDefaultWidth();
+        mStateManager.setViewport(&data.getCaps(), glState, defaultWidth);
+        mStateManager.setScissorRectangle(glState, defaultWidth);
+    }
+    else
+    {
+        mStateManager.setViewport_fl9(&data.getCaps(), glState.getViewport(),
+                                      glState.getNearPlane(), glState.getFarPlane());
+        mStateManager.setScissorRectangle_fl9(glState.getScissors(),
+                                              glState.isScissorTestEnabled());
+    }
 
     // Setting scissor state
-    mStateManager.setScissorRectangle(glState.getScissor(), glState.isScissorTestEnabled());
 
     // Applying rasterizer state to D3D11 device
     // Since framebuffer->getSamples will return the original samples which may be different with
@@ -1841,6 +1873,9 @@ gl::Error Renderer11::drawArraysImpl(const gl::ContextState &data,
 
     if (programD3D->usesGeometryShader(mode) && glState.isTransformFeedbackActiveUnpaused())
     {
+        // TODO(Shahmeer): There are now additional situations where a geometry shader may be
+        // used than originally intended so ensure that this path isn't required for Multiview
+
         // Since we use a geometry if-and-only-if we rewrite vertex streams, transform feedback
         // won't get the correct output. To work around this, draw with *only* the stream out
         // first (no pixel shader) to feed the stream out buffers and then draw again with the
@@ -2885,6 +2920,8 @@ void Renderer11::release()
 
     SafeRelease(mDeviceContext1);
 
+    SafeRelease(mDeviceContext3);
+
     if (mDeviceContext)
     {
         mDeviceContext->ClearState();
@@ -3089,10 +3126,16 @@ bool Renderer11::getNV12TextureSupport() const
     return (formatSupport & D3D11_FORMAT_SUPPORT_TEXTURE2D) != 0;
 }
 
+bool Renderer11::canWriteVpRtIndexFromVs() const
+{
+    return mRenderer11DeviceCaps.supportsVpRtIndexWriteFromVs;
+}
+
 int Renderer11::getMajorShaderModel() const
 {
     switch (mRenderer11DeviceCaps.featureLevel)
     {
+        case D3D_FEATURE_LEVEL_11_1:
         case D3D_FEATURE_LEVEL_11_0:
             return D3D11_SHADER_MAJOR_VERSION;  // 5
         case D3D_FEATURE_LEVEL_10_1:
@@ -3111,6 +3154,7 @@ int Renderer11::getMinorShaderModel() const
 {
     switch (mRenderer11DeviceCaps.featureLevel)
     {
+        case D3D_FEATURE_LEVEL_11_1:
         case D3D_FEATURE_LEVEL_11_0:
             return D3D11_SHADER_MINOR_VERSION;  // 0
         case D3D_FEATURE_LEVEL_10_1:
@@ -3129,6 +3173,7 @@ std::string Renderer11::getShaderModelSuffix() const
 {
     switch (mRenderer11DeviceCaps.featureLevel)
     {
+        case D3D_FEATURE_LEVEL_11_1:
         case D3D_FEATURE_LEVEL_11_0:
             return "";
         case D3D_FEATURE_LEVEL_10_1:
@@ -4677,6 +4722,10 @@ gl::Error Renderer11::genericDrawElements(Context11 *context,
     ASSERT(!glState.isTransformFeedbackActiveUnpaused());
 
     size_t vertexCount = indexInfo.indexRange.vertexCount();
+
+    // Debug (Shahmeer)
+    assert(programD3D->usesViewID() == false || instances == 0);
+
     ANGLE_TRY(applyVertexBuffer(glState, mode, static_cast<GLsizei>(indexInfo.indexRange.start),
                                 static_cast<GLsizei>(vertexCount), instances, &indexInfo));
     ANGLE_TRY(applyTextures(context, data));
@@ -4685,6 +4734,12 @@ gl::Error Renderer11::genericDrawElements(Context11 *context,
 
     if (!skipDraw(data, mode))
     {
+        if (programD3D->usesViewID())
+        {
+            const int numViews = getWorkarounds().multiviewStereoViews ? 2 : glState.getNumViews();
+            instances          = (instances > 0 ? instances * numViews : numViews);
+        }
+
         ANGLE_TRY(drawElementsImpl(data, indexInfo, mode, count, type, indices, instances));
     }
 
@@ -4714,6 +4769,8 @@ gl::Error Renderer11::genericDrawArrays(Context11 *context,
 
     ANGLE_TRY(updateState(data, mode));
     ANGLE_TRY(applyTransformFeedbackBuffers(data));
+    // Debug(Shahmeer)
+    assert(programD3D->usesViewID() == false || instances == 0);
     ANGLE_TRY(applyVertexBuffer(glState, mode, first, count, instances, nullptr));
     ANGLE_TRY(applyTextures(context, data));
     ANGLE_TRY(applyShaders(data, mode));
@@ -4721,6 +4778,12 @@ gl::Error Renderer11::genericDrawArrays(Context11 *context,
 
     if (!skipDraw(data, mode))
     {
+        if (programD3D->usesViewID())
+        {
+            const int numViews = getWorkarounds().multiviewStereoViews ? 2 : glState.getNumViews();
+            instances          = (instances > 0 ? instances * numViews : numViews);
+        }
+
         ANGLE_TRY(drawArraysImpl(data, mode, first, count, instances));
 
         if (glState.isTransformFeedbackActiveUnpaused())
@@ -4753,6 +4816,9 @@ gl::Error Renderer11::genericDrawIndirect(Context11 *context,
     ANGLE_TRY(applyTextures(context, data));
     ANGLE_TRY(applyShaders(data, mode));
     ANGLE_TRY(programD3D->applyUniformBuffers(data));
+
+    // TODO(Shahmeer): Handle for multiview
+    ASSERT(programD3D->usesViewID() == false);
 
     if (type == GL_NONE)
     {

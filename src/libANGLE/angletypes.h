@@ -168,6 +168,16 @@ struct DepthStencilState
     GLuint stencilBackWritemask;
 };
 
+struct MultiviewState
+{
+    bool enabled;
+    GLenum multiviewOutputConfig;  // SBS or RTVarray
+    GLenum multiviewRenderMode;    // ViewSelect by: CBV, VS, GS
+    GLint numViews;
+    bool autoViewRects;  // Generate VP and Scissor rects for additional views based on existing
+                         // one. TODO: Determine if this should be a workaround or live here.
+};
+
 struct DrawArraysIndirectCommand
 {
     GLuint count;

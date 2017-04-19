@@ -115,6 +115,7 @@ class ProgramD3DMetadata final : angle::NonCopyable
                        const ShaderD3D *fragmentShader);
 
     int getRendererMajorShaderModel() const;
+    bool canWriteVpRtIndexFromVs() const;
     bool usesBroadcast(const gl::ContextState &data) const;
     bool usesFragDepth() const;
     bool usesPointCoord() const;
@@ -126,6 +127,7 @@ class ProgramD3DMetadata final : angle::NonCopyable
     bool usesTransformFeedbackGLPosition() const;
     bool usesSystemValuePointSize() const;
     bool usesMultipleFragmentOuts() const;
+    bool usesViewID() const;
     GLint getMajorShaderVersion() const;
     const ShaderD3D *getFragmentShader() const;
 
@@ -136,6 +138,7 @@ class ProgramD3DMetadata final : angle::NonCopyable
     const bool mUsesViewScale;
     const ShaderD3D *mVertexShader;
     const ShaderD3D *mFragmentShader;
+    const bool mCanOutputVpRtIndexInVs;
 };
 
 class ProgramD3D : public ProgramImpl
@@ -155,6 +158,7 @@ class ProgramD3D : public ProgramImpl
 
     bool usesPointSize() const { return mUsesPointSize; }
     bool usesPointSpriteEmulation() const;
+    bool usesViewID() const;
     bool usesGeometryShader(GLenum drawMode) const;
     bool usesInstancedPointSpriteEmulation() const;
 
@@ -414,6 +418,7 @@ class ProgramD3D : public ProgramImpl
 
     bool mUsesPointSize;
     bool mUsesFlatInterpolation;
+    bool mUsesViewID;
 
     std::unique_ptr<UniformStorageD3D> mVertexUniformStorage;
     std::unique_ptr<UniformStorageD3D> mFragmentUniformStorage;

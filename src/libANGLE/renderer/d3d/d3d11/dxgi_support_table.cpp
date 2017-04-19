@@ -2435,6 +2435,7 @@ const DXGISupport &GetDXGISupport(DXGI_FORMAT dxgiFormat, D3D_FEATURE_LEVEL feat
             return GetDXGISupport_10_0(dxgiFormat);
         case D3D_FEATURE_LEVEL_10_1:
             return GetDXGISupport_10_1(dxgiFormat);
+        case D3D_FEATURE_LEVEL_11_1:
         case D3D_FEATURE_LEVEL_11_0:
             return GetDXGISupport_11_0(dxgiFormat);
         default:

@@ -55,6 +55,12 @@ bool IsPartialBlit(gl::Context *context,
     if (context->getGLState().isScissorTestEnabled())
     {
         const Rectangle &scissor = context->getGLState().getScissor();
+
+        assert(((scissor.x & MULTIVIEW_XY_SIGNATURE_MASK) == 0) ||
+               ((scissor.y & MULTIVIEW_XY_SIGNATURE_MASK) == 0) ||
+               (((scissor.x & scissor.y) & MULTIVIEW_XY_SIGNATURE_MASK) == MULTIVIEW_XY_SIGNATURE));
+        assert(scissor.x >= 0 && scissor.y >= 0 && scissor.width >= 0 && scissor.height >= 0);
+
         return scissor.x > 0 || scissor.y > 0 || scissor.width < writeSize.width ||
                scissor.height < writeSize.height;
     }

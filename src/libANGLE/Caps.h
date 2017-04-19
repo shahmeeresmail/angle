@@ -349,6 +349,8 @@ struct Extensions
     // GL_CHROMIUM_path_rendering
     bool pathRendering;
 
+    // GL_OVR_multi_view
+    bool multiView;
     // GL_OES_surfaceless_context
     bool surfacelessContext;
 
@@ -537,6 +539,8 @@ struct Caps
 
     // ES 3.1 (April 29, 2015) Table 20.49: Framebuffer Dependent Values
     GLuint maxSamples;
+
+    GLuint maxViewsOvr;
 };
 
 Caps GenerateMinimumCaps(const Version &clientVersion);

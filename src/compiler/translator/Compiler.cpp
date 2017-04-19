@@ -326,9 +326,10 @@ TIntermBlock *TCompiler::compileTreeImpl(const char *const shaderStrings[],
         // Highp might have been auto-enabled based on shader version
         fragmentPrecisionHigh = parseContext.getFragmentPrecisionHigh();
 
-        if (success && (IsWebGLBasedSpec(shaderSpec) &&
-                        IsExtensionEnabled(extensionBehavior, "GL_OVR_multiview") &&
-                        IsExtensionEnabled(extensionBehavior, "GL_OVR_multiview2")))
+        bool multiview  = IsExtensionEnabled(extensionBehavior, "GL_OVR_multiview");
+        bool multiview2 = IsExtensionEnabled(extensionBehavior, "GL_OVR_multiview2");
+
+        if (success && (IsWebGLBasedSpec(shaderSpec) && multiview && multiview2))
         {
             // Can't enable both extensions at the same time.
             mDiagnostics.globalError("Can't enable both OVR_multiview and OVR_multiview2");
@@ -369,9 +370,8 @@ TIntermBlock *TCompiler::compileTreeImpl(const char *const shaderStrings[],
             success =
                 ValidateLimitations(root, shaderType, symbolTable, shaderVersion, &mDiagnostics);
 
-        bool multiview2 = IsExtensionEnabled(extensionBehavior, "GL_OVR_multiview2");
         if (success && compileResources.OVR_multiview && IsWebGLBasedSpec(shaderSpec) &&
-            (IsExtensionEnabled(extensionBehavior, "GL_OVR_multiview") || multiview2))
+            (multiview || multiview2))
             success = ValidateMultiviewWebGL(root, shaderType, symbolTable, shaderVersion,
                                              multiview2, &mDiagnostics);
 
@@ -626,6 +626,7 @@ void TCompiler::setResourceString()
         << ":MaxDualSourceDrawBuffers:" << compileResources.MaxDualSourceDrawBuffers
         << ":NV_draw_buffers:" << compileResources.NV_draw_buffers
         << ":WEBGL_debug_shader_precision:" << compileResources.WEBGL_debug_shader_precision
+        << ":OVR_multiview:" << compileResources.OVR_multiview
         << ":MaxImageUnits:" << compileResources.MaxImageUnits
         << ":MaxVertexImageUniforms:" << compileResources.MaxVertexImageUniforms
         << ":MaxFragmentImageUniforms:" << compileResources.MaxFragmentImageUniforms

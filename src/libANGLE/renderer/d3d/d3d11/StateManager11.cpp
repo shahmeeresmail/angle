@@ -152,11 +152,15 @@ StateManager11::StateManager11(Renderer11 *renderer)
       mScissorStateIsDirty(false),
       mCurScissorEnabled(false),
       mCurScissorRect(),
+      mCurScissorCount(1),
       mViewportStateIsDirty(false),
       mCurViewport(),
+      mCurViewportCount(1),
       mCurNear(0.0f),
-      mCurFar(0.0f),
+      mCurFar(1.0f),
       mViewportBounds(),
+      mCurViewCount(1),
+      mCurMultiviewMode(0),
       mRenderTargetIsDirty(false),
       mDirtyCurrentValueAttribs(),
       mCurrentValueAttribs()
@@ -243,6 +247,54 @@ void StateManager11::updatePresentPath(bool presentPathFastActive,
         mViewportStateIsDirty                = true;  // Viewport may need to be vertically inverted
         mScissorStateIsDirty                 = true;  // Scissor rect may need to be vertically inverted
         mRasterizerStateIsDirty              = true;  // Cull Mode may need to be inverted
+    }
+}
+
+void StateManager11::updateMultiviewState(const gl::State &state)
+{
+    bool multiviewStereoViews = mRenderer->getWorkarounds().multiviewStereoViews;
+    bool shaderUsesMultiview  = GetImplAs<ProgramD3D>(state.getProgram())->usesViewID();
+    bool multiviewEnabledWithViewIdUsage =
+        mRenderer->getWorkarounds().multiviewEnabledWithViewIDUsage;
+    int newMultiviewMode = state.getMultiviewMode();
+
+    bool multiviewEnabled = false;
+
+    // Workaround needed until spec finalized
+    if (multiviewEnabledWithViewIdUsage)
+    {
+        multiviewEnabled = shaderUsesMultiview ? true : false;
+        newMultiviewMode = shaderUsesMultiview ? newMultiviewMode : GL_MULTIVIEW_DISABLED_OVR;
+    }
+    else
+    {
+        multiviewEnabled = newMultiviewMode != GL_MULTIVIEW_DISABLED_OVR;
+    }
+
+    // Workaround needed until spec finalized
+    if (multiviewEnabled && mRenderer->getWorkarounds().forceMultiviewSbs)
+    {
+        newMultiviewMode = GL_MULTIVIEW_DEFAULTFB_SIDEBYSIDE_OVR;
+    }
+
+    int newViewCount;
+
+    if (multiviewEnabled)
+    {
+        // Workaround needed until spec finished
+        newViewCount = multiviewStereoViews ? 2 : state.getNumViews();
+    }
+    else
+    {
+        newViewCount = 1;
+    }
+
+    if (mCurViewCount != newViewCount || mCurMultiviewMode != newMultiviewMode)
+    {
+        mCurMultiviewMode     = newMultiviewMode;
+        mViewportStateIsDirty = true;
+        mScissorStateIsDirty  = true;
+        mCurViewCount         = newViewCount;
     }
 }
 
@@ -444,7 +496,9 @@ void StateManager11::syncState(const gl::State &state, const gl::State::DirtyBit
                 }
                 break;
             case gl::State::DIRTY_BIT_SCISSOR:
-                if (state.getScissor() != mCurScissorRect)
+                if (state.getScissorCount() != mCurScissorCount ||
+                    (memcmp(state.getScissors(), mCurScissorRect,
+                            mCurScissorCount * sizeof(gl::Rectangle)) != 0))
                 {
                     mScissorStateIsDirty = true;
                 }
@@ -464,13 +518,23 @@ void StateManager11::syncState(const gl::State &state, const gl::State::DirtyBit
                 }
                 break;
             case gl::State::DIRTY_BIT_VIEWPORT:
-                if (state.getViewport() != mCurViewport)
+                if (state.getViewportCount() != mCurViewportCount ||
+                    (memcmp(state.getViewports(), mCurViewport,
+                            mCurViewportCount * sizeof(gl::Rectangle)) != 0))
                 {
                     mViewportStateIsDirty = true;
                 }
                 break;
+            case gl::State::DIRTY_BIT_MULTIVIEW:
+            {
+                updateMultiviewState(state);
+                break;
+            }
             case gl::State::DIRTY_BIT_DRAW_FRAMEBUFFER_BINDING:
                 mRenderTargetIsDirty = true;
+                break;
+            case gl::State::DIRTY_BIT_PROGRAM_BINDING:
+                updateMultiviewState(state);
                 break;
             default:
                 if (dirtyBit >= gl::State::DIRTY_BIT_CURRENT_VALUE_0 &&
@@ -652,37 +716,265 @@ gl::Error StateManager11::setRasterizerState(const gl::RasterizerState &rasterSt
     return gl::NoError();
 }
 
-void StateManager11::setScissorRectangle(const gl::Rectangle &scissor, bool enabled)
+void StateManager11::setScissorRectangle(const gl::State &glState, const GLint defaultWidth)
 {
     if (!mScissorStateIsDirty)
         return;
 
-    int modifiedScissorY = scissor.y;
+    const int numScissorRects = glState.getScissorCount();
+
+    // TODO: Remove this block and the function setViewportOrig
+    if (mCurMultiviewMode == GL_MULTIVIEW_DISABLED_OVR ||
+        (numScissorRects == 1 &&
+         (mRenderer->getWorkarounds().autoCreateSbsViewsForMultiview == false ||
+          mCurMultiviewMode != GL_MULTIVIEW_DEFAULTFB_SIDEBYSIDE_OVR)))
+    {
+        setScissorRectangleOrig(glState.getScissor(), glState.isScissorTestEnabled());
+        return;
+    }
+
+    D3D11_RECT dxRects[gl::IMPLEMENTATION_MAX_VIEWPORT_SCISSOR_RECTS];
+    const gl::Rectangle *scissors = glState.getScissors();
+    const bool enabled            = glState.isScissorTestEnabled();
+
+    if (enabled)
+    {
+        int numDxScissorRects = 0;
+
+        if (mCurMultiviewMode == GL_MULTIVIEW_DEFAULTFB_SIDEBYSIDE_OVR &&
+            mRenderer->getWorkarounds().autoCreateSbsViewsForMultiview)
+        {
+            assert(mCurViewCount == 2);
+            assert(numScissorRects == 1);
+
+            int left         = std::max(0, scissors[0].x) / mCurViewCount;
+            const int top    = std::max(0, scissors[0].y);
+            const int bottom = scissors[0].y + std::max(0, scissors[0].height);
+            const int width  = std::max(0, scissors[0].width) / mCurViewCount;
+            // Debug(Shahmeer)
+            // const int viewWidth = defaultWidth / numViews;
+            numDxScissorRects = mCurViewCount;
+
+            // TODO(Shahmeer): Handle handle base view indices other than zero
+            for (int i = 0; i < numDxScissorRects; i++)
+            {
+                dxRects[i].left   = left;
+                dxRects[i].top    = top;
+                dxRects[i].right  = left + width;
+                dxRects[i].bottom = bottom;
+
+                // left += viewWidth;
+                left += width;
+            }
+        }
+        else
+        {
+            numDxScissorRects = numScissorRects;
+
+            for (int i = 0; i < numDxScissorRects; i++)
+            {
+                dxRects[i].left   = std::max(0, scissors[i].x);
+                dxRects[i].top    = std::max(0, scissors[i].y);
+                dxRects[i].right  = scissors[i].x + std::max(0, scissors[i].width);
+                dxRects[i].bottom = scissors[i].y + std::max(0, scissors[i].height);
+            }
+        }
+
+        if (mCurPresentPathFastEnabled)
+        {
+            for (int i = 0; i < numDxScissorRects; i++)
+            {
+                int modifiedScissorY =
+                    mCurPresentPathFastColorBufferHeight - scissors[i].height - scissors[i].y;
+                dxRects[i].top    = std::max(0, modifiedScissorY);
+                dxRects[i].bottom = modifiedScissorY + std::max(0, scissors[i].height);
+            }
+        }
+
+        mRenderer->getDeviceContext()->RSSetScissorRects(numDxScissorRects, &dxRects[0]);
+    }
+
+    memcpy(&mCurScissorRect[0], &scissors[0], sizeof(gl::Rectangle) * numScissorRects);
+    mCurScissorCount     = numScissorRects;
+    mCurScissorEnabled   = enabled;
+    mScissorStateIsDirty = false;
+}
+
+void StateManager11::setScissorRectangle_fl9(const gl::Rectangle *scissor, bool enabled)
+{
+    if (!mScissorStateIsDirty)
+        return;
+
+    D3D11_RECT rect;
+
+    int modifiedScissorY = scissor->y;
     if (mCurPresentPathFastEnabled)
     {
-        modifiedScissorY = mCurPresentPathFastColorBufferHeight - scissor.height - scissor.y;
+        modifiedScissorY = mCurPresentPathFastColorBufferHeight - scissor->height - scissor->y;
     }
 
     if (enabled)
     {
-        D3D11_RECT rect;
-        rect.left   = std::max(0, scissor.x);
+        rect.left   = std::max(0, scissor->x);
         rect.top    = std::max(0, modifiedScissorY);
-        rect.right  = scissor.x + std::max(0, scissor.width);
-        rect.bottom = modifiedScissorY + std::max(0, scissor.height);
-
+        rect.right  = scissor->x + std::max(0, scissor->width);
+        rect.bottom = modifiedScissorY + std::max(0, scissor->height);
         mRenderer->getDeviceContext()->RSSetScissorRects(1, &rect);
     }
 
-    mCurScissorRect      = scissor;
+    mCurScissorRect[0] = *scissor;
+
+    mCurScissorCount     = 1;
     mCurScissorEnabled   = enabled;
     mScissorStateIsDirty = false;
 }
 
 void StateManager11::setViewport(const gl::Caps *caps,
-                                 const gl::Rectangle &viewport,
-                                 float zNear,
-                                 float zFar)
+                                 const gl::State &glState,
+                                 const GLint defaultWidth)
+{
+    if (!mViewportStateIsDirty)
+        return;
+
+    const int numViewports = glState.getViewportCount();
+
+    // TODO: Remove this block and the function setViewportOrig
+    if ((mCurMultiviewMode == GL_MULTIVIEW_DISABLED_OVR) ||
+        ((numViewports == 1) &&
+         (mRenderer->getWorkarounds().autoCreateSbsViewsForMultiview == false ||
+          mCurMultiviewMode != GL_MULTIVIEW_DEFAULTFB_SIDEBYSIDE_OVR)))
+    {
+        setViewportOrig(caps, glState.getViewport(), glState.getNearPlane(), glState.getFarPlane());
+        return;
+    }
+
+    const float actualZNear        = gl::clamp01(glState.getNearPlane());
+    const float actualZFar         = gl::clamp01(glState.getFarPlane());
+    const gl::Rectangle *viewports = glState.getViewports();
+    int numDxRects;
+
+    const int maxViewportX = static_cast<int>(caps->maxViewportWidth);
+    const int maxViewportY = static_cast<int>(caps->maxViewportHeight);
+    const int minViewportX = -maxViewportX;
+    const int minViewportY = -maxViewportY;
+
+    D3D11_VIEWPORT dxViewports[gl::IMPLEMENTATION_MAX_VIEWPORT_SCISSOR_RECTS];
+
+    assert(numViewports > 0 && numViewports <= gl::IMPLEMENTATION_MAX_VIEWPORT_SCISSOR_RECTS);
+
+    if (mCurMultiviewMode == GL_MULTIVIEW_DEFAULTFB_SIDEBYSIDE_OVR &&
+        mRenderer->getWorkarounds().autoCreateSbsViewsForMultiview)
+    {
+        // Generate additional viewport rects
+        assert(numViewports == 1);
+        assert(mCurViewCount == 2);
+
+        // Debug(Shahmeer)
+        // int viewWidth = defaultWidth / numViews;
+
+        // TODO(Shahmeer): Handle handle base view indices other than zero
+        numDxRects   = mCurViewCount;
+        int topLeftX = gl::clamp(viewports[0].x, minViewportX, maxViewportX) / numDxRects;
+        int topLeftY = gl::clamp(viewports[0].y, minViewportY, maxViewportY);
+        int width    = gl::clamp(viewports[0].width, 0, maxViewportX - topLeftX) / numDxRects;
+        int height   = gl::clamp(viewports[0].height, 0, maxViewportY - topLeftY);
+
+        for (int i = 0; i < numDxRects; i++)
+        {
+            dxViewports[i].TopLeftX = static_cast<float>(topLeftX);
+            dxViewports[i].TopLeftY = static_cast<float>(topLeftY);
+            dxViewports[i].Width    = static_cast<float>(width);
+            dxViewports[i].Height   = static_cast<float>(height);
+            dxViewports[i].MinDepth = actualZNear;
+            dxViewports[i].MaxDepth = actualZFar;
+            // Debug(Shahmeer)
+            // topLeftX += viewWidth;
+            topLeftX += width;
+        }
+    }
+    else
+    {
+        numDxRects = numViewports;
+        for (int i = 0; i < numDxRects; i++)
+        {
+            int dxViewportTopLeftX = gl::clamp(viewports[i].x, minViewportX, maxViewportX);
+            int dxViewportTopLeftY = gl::clamp(viewports[i].y, minViewportY, maxViewportY);
+            int dxViewportWidth =
+                gl::clamp(viewports[i].width, 0, maxViewportX - dxViewportTopLeftX);
+            int dxViewportHeight =
+                gl::clamp(viewports[i].height, 0, maxViewportY - dxViewportTopLeftY);
+
+            dxViewports[i].TopLeftX = static_cast<float>(dxViewportTopLeftX);
+            dxViewports[i].TopLeftY = static_cast<float>(dxViewportTopLeftY);
+            dxViewports[i].Width    = static_cast<float>(dxViewportWidth);
+            dxViewports[i].Height   = static_cast<float>(dxViewportHeight);
+            dxViewports[i].MinDepth = actualZNear;
+            dxViewports[i].MaxDepth = actualZFar;
+        }
+    }
+
+    if (mCurPresentPathFastEnabled)
+    {
+        for (int i = 0; i < numDxRects; i++)
+        {
+            // When present path fast is active and we're rendering to framebuffer 0, we must invert
+            // the viewport in Y-axis.
+            // NOTE: We delay the inversion until right before the call to RSSetViewports, and leave
+            // dxViewportTopLeftY unchanged. This allows us to calculate viewAdjust below using the
+            // unaltered dxViewportTopLeftY value.
+            dxViewports[i].TopLeftY =
+                static_cast<float>(mCurPresentPathFastColorBufferHeight - dxViewports[i].TopLeftY -
+                                   dxViewports[i].Height);
+        }
+    }
+
+    memcpy(&mCurViewport[0], &viewports[0], sizeof(gl::Rectangle) * numViewports);
+    mCurNear = actualZNear;
+    mCurFar  = actualZFar;
+
+    // TODO: Insert ViewCoords and ViewScale for all views
+    mPixelConstants.viewCoords[0] = viewports[0].width * 0.5f;
+    mPixelConstants.viewCoords[1] = viewports[0].height * 0.5f;
+    mPixelConstants.viewCoords[2] = viewports[0].x + (viewports[0].width * 0.5f);
+    mPixelConstants.viewCoords[3] = viewports[0].y + (viewports[0].height * 0.5f);
+
+    // Instanced pointsprite emulation requires ViewCoords to be defined in the
+    // the vertex shader.
+    mVertexConstants.viewCoords[0] = mPixelConstants.viewCoords[0];
+    mVertexConstants.viewCoords[1] = mPixelConstants.viewCoords[1];
+    mVertexConstants.viewCoords[2] = mPixelConstants.viewCoords[2];
+    mVertexConstants.viewCoords[3] = mPixelConstants.viewCoords[3];
+
+    mPixelConstants.depthFront[0] = (actualZFar - actualZNear) * 0.5f;
+    mPixelConstants.depthFront[1] = (actualZNear + actualZFar) * 0.5f;
+
+    mVertexConstants.depthRange[0] = actualZNear;
+    mVertexConstants.depthRange[1] = actualZFar;
+    mVertexConstants.depthRange[2] = actualZFar - actualZNear;
+
+    mPixelConstants.depthRange[0] = actualZNear;
+    mPixelConstants.depthRange[1] = actualZFar;
+    mPixelConstants.depthRange[2] = actualZFar - actualZNear;
+
+    mPixelConstants.viewScale[0] = 1.0f;
+    mPixelConstants.viewScale[1] = mCurPresentPathFastEnabled ? 1.0f : -1.0f;
+    mPixelConstants.viewScale[2] = 1.0f;
+    mPixelConstants.viewScale[3] = 1.0f;
+
+    mVertexConstants.viewScale[0] = mPixelConstants.viewScale[0];
+    mVertexConstants.viewScale[1] = mPixelConstants.viewScale[1];
+    mVertexConstants.viewScale[2] = mPixelConstants.viewScale[2];
+    mVertexConstants.viewScale[3] = mPixelConstants.viewScale[3];
+
+    mRenderer->getDeviceContext()->RSSetViewports(numDxRects, dxViewports);
+
+    mViewportStateIsDirty = false;
+}
+
+void StateManager11::setViewport_fl9(const gl::Caps *caps,
+                                     const gl::Rectangle &viewport,
+                                     float zNear,
+                                     float zFar)
 {
     if (!mViewportStateIsDirty)
         return;
@@ -690,24 +982,24 @@ void StateManager11::setViewport(const gl::Caps *caps,
     float actualZNear = gl::clamp01(zNear);
     float actualZFar  = gl::clamp01(zFar);
 
-    int dxMaxViewportBoundsX = static_cast<int>(caps->maxViewportWidth);
-    int dxMaxViewportBoundsY = static_cast<int>(caps->maxViewportHeight);
-    int dxMinViewportBoundsX = -dxMaxViewportBoundsX;
-    int dxMinViewportBoundsY = -dxMaxViewportBoundsY;
+    int maxViewportX = static_cast<int>(caps->maxViewportWidth);
+    int maxViewportY = static_cast<int>(caps->maxViewportHeight);
+    int minViewportX = -maxViewportX;
+    int minViewportY = -maxViewportY;
 
     if (mRenderer->getRenderer11DeviceCaps().featureLevel <= D3D_FEATURE_LEVEL_9_3)
     {
         // Feature Level 9 viewports shouldn't exceed the dimensions of the rendertarget.
-        dxMaxViewportBoundsX = static_cast<int>(mViewportBounds.width);
-        dxMaxViewportBoundsY = static_cast<int>(mViewportBounds.height);
-        dxMinViewportBoundsX = 0;
-        dxMinViewportBoundsY = 0;
+        maxViewportX = static_cast<int>(mViewportBounds.width);
+        maxViewportY = static_cast<int>(mViewportBounds.height);
+        minViewportX = 0;
+        minViewportY = 0;
     }
 
-    int dxViewportTopLeftX = gl::clamp(viewport.x, dxMinViewportBoundsX, dxMaxViewportBoundsX);
-    int dxViewportTopLeftY = gl::clamp(viewport.y, dxMinViewportBoundsY, dxMaxViewportBoundsY);
-    int dxViewportWidth    = gl::clamp(viewport.width, 0, dxMaxViewportBoundsX - dxViewportTopLeftX);
-    int dxViewportHeight   = gl::clamp(viewport.height, 0, dxMaxViewportBoundsY - dxViewportTopLeftY);
+    int dxViewportTopLeftX = gl::clamp(viewport.x, minViewportX, maxViewportX);
+    int dxViewportTopLeftY = gl::clamp(viewport.y, minViewportY, maxViewportY);
+    int dxViewportWidth    = gl::clamp(viewport.width, 0, maxViewportX - dxViewportTopLeftX);
+    int dxViewportHeight   = gl::clamp(viewport.height, 0, maxViewportY - dxViewportTopLeftY);
 
     D3D11_VIEWPORT dxViewport;
     dxViewport.TopLeftX = static_cast<float>(dxViewportTopLeftX);
@@ -734,7 +1026,8 @@ void StateManager11::setViewport(const gl::Caps *caps,
 
     mRenderer->getDeviceContext()->RSSetViewports(1, &dxViewport);
 
-    mCurViewport = viewport;
+    mCurViewport[0]   = viewport;
+    mCurViewportCount = 1;
     mCurNear     = actualZNear;
     mCurFar      = actualZFar;
 
@@ -1126,6 +1419,146 @@ gl::Error StateManager11::updateCurrentValueAttribs(const gl::State &state,
 const std::vector<TranslatedAttribute> &StateManager11::getCurrentValueAttribs() const
 {
     return mCurrentValueAttribs;
+}
+
+// TODO(Shahmeer): Remove
+void StateManager11::setScissorRectangleOrig(const gl::Rectangle &scissor, bool enabled)
+{
+    if (!mScissorStateIsDirty)
+        return;
+
+    int modifiedScissorY = scissor.y;
+    if (mCurPresentPathFastEnabled)
+    {
+        modifiedScissorY = mCurPresentPathFastColorBufferHeight - scissor.height - modifiedScissorY;
+    }
+
+    if (enabled)
+    {
+        D3D11_RECT rect;
+        rect.left   = std::max(0, scissor.x);
+        rect.top    = std::max(0, modifiedScissorY);
+        rect.right  = rect.left + std::max(0, scissor.width);
+        rect.bottom = rect.top + std::max(0, scissor.height);
+
+        mRenderer->getDeviceContext()->RSSetScissorRects(1, &rect);
+    }
+
+    mCurScissorRect[0]   = scissor;
+    mCurScissorEnabled   = enabled;
+    mCurScissorCount     = 1;
+    mScissorStateIsDirty = false;
+}
+
+// TODO(Shahmeer): Remove
+void StateManager11::setViewportOrig(const gl::Caps *caps,
+                                     const gl::Rectangle &viewport,
+                                     float zNear,
+                                     float zFar)
+{
+    if (!mViewportStateIsDirty)
+        return;
+
+    float actualZNear = gl::clamp01(zNear);
+    float actualZFar  = gl::clamp01(zFar);
+
+    int dxMaxViewportBoundsX = static_cast<int>(caps->maxViewportWidth);
+    int dxMaxViewportBoundsY = static_cast<int>(caps->maxViewportHeight);
+    int dxMinViewportBoundsX = -dxMaxViewportBoundsX;
+    int dxMinViewportBoundsY = -dxMaxViewportBoundsY;
+
+    if (mRenderer->getRenderer11DeviceCaps().featureLevel <= D3D_FEATURE_LEVEL_9_3)
+    {
+        // Feature Level 9 viewports shouldn't exceed the dimensions of the rendertarget.
+        dxMaxViewportBoundsX = static_cast<int>(mViewportBounds.width);
+        dxMaxViewportBoundsY = static_cast<int>(mViewportBounds.height);
+        dxMinViewportBoundsX = 0;
+        dxMinViewportBoundsY = 0;
+    }
+
+    int dxViewportTopLeftX = gl::clamp(viewport.x, dxMinViewportBoundsX, dxMaxViewportBoundsX);
+    int dxViewportTopLeftY = gl::clamp(viewport.y, dxMinViewportBoundsY, dxMaxViewportBoundsY);
+    int dxViewportWidth  = gl::clamp(viewport.width, 0, dxMaxViewportBoundsX - dxViewportTopLeftX);
+    int dxViewportHeight = gl::clamp(viewport.height, 0, dxMaxViewportBoundsY - dxViewportTopLeftY);
+
+    D3D11_VIEWPORT dxViewport;
+    dxViewport.TopLeftX = static_cast<float>(dxViewportTopLeftX);
+
+    if (mCurPresentPathFastEnabled)
+    {
+        // When present path fast is active and we're rendering to framebuffer 0, we must invert
+        // the viewport in Y-axis.
+        // NOTE: We delay the inversion until right before the call to RSSetViewports, and leave
+        // dxViewportTopLeftY unchanged. This allows us to calculate viewAdjust below using the
+        // unaltered dxViewportTopLeftY value.
+        dxViewport.TopLeftY = static_cast<float>(mCurPresentPathFastColorBufferHeight -
+                                                 dxViewportTopLeftY - dxViewportHeight);
+    }
+    else
+    {
+        dxViewport.TopLeftY = static_cast<float>(dxViewportTopLeftY);
+    }
+
+    dxViewport.Width    = static_cast<float>(dxViewportWidth);
+    dxViewport.Height   = static_cast<float>(dxViewportHeight);
+    dxViewport.MinDepth = actualZNear;
+    dxViewport.MaxDepth = actualZFar;
+
+    mRenderer->getDeviceContext()->RSSetViewports(1, &dxViewport);
+
+    mCurViewport[0] = viewport;
+    mCurViewCount   = 1;
+    mCurNear        = actualZNear;
+    mCurFar         = actualZFar;
+
+    // On Feature Level 9_*, we must emulate large and/or negative viewports in the shaders
+    // using viewAdjust (like the D3D9 renderer).
+    if (mRenderer->getRenderer11DeviceCaps().featureLevel <= D3D_FEATURE_LEVEL_9_3)
+    {
+        mVertexConstants.viewAdjust[0] = static_cast<float>((viewport.width - dxViewportWidth) +
+                                                            2 * (viewport.x - dxViewportTopLeftX)) /
+                                         dxViewport.Width;
+        mVertexConstants.viewAdjust[1] = static_cast<float>((viewport.height - dxViewportHeight) +
+                                                            2 * (viewport.y - dxViewportTopLeftY)) /
+                                         dxViewport.Height;
+        mVertexConstants.viewAdjust[2] = static_cast<float>(viewport.width) / dxViewport.Width;
+        mVertexConstants.viewAdjust[3] = static_cast<float>(viewport.height) / dxViewport.Height;
+    }
+
+    mPixelConstants.viewCoords[0] = viewport.width * 0.5f;
+    mPixelConstants.viewCoords[1] = viewport.height * 0.5f;
+    mPixelConstants.viewCoords[2] = viewport.x + (viewport.width * 0.5f);
+    mPixelConstants.viewCoords[3] = viewport.y + (viewport.height * 0.5f);
+
+    // Instanced pointsprite emulation requires ViewCoords to be defined in the
+    // the vertex shader.
+    mVertexConstants.viewCoords[0] = mPixelConstants.viewCoords[0];
+    mVertexConstants.viewCoords[1] = mPixelConstants.viewCoords[1];
+    mVertexConstants.viewCoords[2] = mPixelConstants.viewCoords[2];
+    mVertexConstants.viewCoords[3] = mPixelConstants.viewCoords[3];
+
+    mPixelConstants.depthFront[0] = (actualZFar - actualZNear) * 0.5f;
+    mPixelConstants.depthFront[1] = (actualZNear + actualZFar) * 0.5f;
+
+    mVertexConstants.depthRange[0] = actualZNear;
+    mVertexConstants.depthRange[1] = actualZFar;
+    mVertexConstants.depthRange[2] = actualZFar - actualZNear;
+
+    mPixelConstants.depthRange[0] = actualZNear;
+    mPixelConstants.depthRange[1] = actualZFar;
+    mPixelConstants.depthRange[2] = actualZFar - actualZNear;
+
+    mPixelConstants.viewScale[0] = 1.0f;
+    mPixelConstants.viewScale[1] = mCurPresentPathFastEnabled ? 1.0f : -1.0f;
+    mPixelConstants.viewScale[2] = 1.0f;
+    mPixelConstants.viewScale[3] = 1.0f;
+
+    mVertexConstants.viewScale[0] = mPixelConstants.viewScale[0];
+    mVertexConstants.viewScale[1] = mPixelConstants.viewScale[1];
+    mVertexConstants.viewScale[2] = mPixelConstants.viewScale[2];
+    mVertexConstants.viewScale[3] = mPixelConstants.viewScale[3];
+
+    mViewportStateIsDirty = false;
 }
 
 }  // namespace rx

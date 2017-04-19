@@ -83,6 +83,7 @@ CollectVariables::CollectVariables(std::vector<sh::Attribute> *attribs,
       mFrontFacingAdded(false),
       mFragCoordAdded(false),
       mInstanceIDAdded(false),
+      mViewIDAdded(false),
       mVertexIDAdded(false),
       mPositionAdded(false),
       mPointSizeAdded(false),
@@ -279,6 +280,22 @@ void CollectVariables::visitSymbol(TIntermSymbol *symbol)
                     info.location      = -1;
                     mAttribs->push_back(info);
                     mVertexIDAdded = true;
+                }
+                return;
+            case EvqViewIDOVR:
+                if (!mViewIDAdded)
+                {
+                    Attribute info;
+                    const char kName[] = "gl_ViewID_OVR";
+                    info.name          = kName;
+                    info.mappedName    = kName;
+                    info.type          = GL_INT;
+                    info.arraySize     = 0;
+                    info.precision     = GL_HIGH_INT;
+                    info.staticUse     = true;
+                    info.location      = -1;
+                    mAttribs->push_back(info);
+                    mViewIDAdded = true;
                 }
                 return;
             case EvqPosition:

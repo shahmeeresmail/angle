@@ -281,6 +281,9 @@ void GenerateCaps(const FunctionsGL *functions,
     caps->maxViewportWidth = QueryGLIntRange(functions, GL_MAX_VIEWPORT_DIMS, 0); // GL 1.0 / ES 2.0
     caps->maxViewportHeight = QueryGLIntRange(functions, GL_MAX_VIEWPORT_DIMS, 1); // GL 1.0 / ES 2.0
 
+    // TODO: Support Desktop GL
+    caps->maxViewsOvr = 0;
+
     if (functions->standard == STANDARD_GL_DESKTOP &&
         (functions->profile & GL_CONTEXT_CORE_PROFILE_BIT) != 0)
     {
@@ -842,6 +845,8 @@ void GenerateCaps(const FunctionsGL *functions,
     extensions->packSubimage = functions->standard == STANDARD_GL_DESKTOP ||
                                functions->isAtLeastGLES(gl::Version(3, 0)) ||
                                functions->hasGLESExtension("GL_NV_pack_subimage");
+
+    extensions->multiView = false;
     extensions->debugMarker =
         functions->isAtLeastGL(gl::Version(4, 3)) || functions->hasGLExtension("GL_KHR_debug") ||
         functions->isAtLeastGLES(gl::Version(3, 2)) || functions->hasGLESExtension("GL_KHR_debug");

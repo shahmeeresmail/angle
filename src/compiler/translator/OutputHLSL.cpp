@@ -114,6 +114,7 @@ OutputHLSL::OutputHLSL(sh::GLenum shaderType,
     mUsesPointSize               = false;
     mUsesInstanceID              = false;
     mUsesVertexID                = false;
+    mUsesViewID                  = false;
     mUsesFragDepth               = false;
     mUsesNumWorkGroups           = false;
     mUsesWorkGroupID             = false;
@@ -448,6 +449,12 @@ void OutputHLSL::header(TInfoSinkBase &out, const BuiltInFunctionEmulator *built
             out << "static bool gl_FrontFacing = false;\n";
         }
 
+        if (mUsesViewID)
+        {
+            // Not currently required in PS stage
+            // out << "static uint gl_ViewID_OVR;\n";
+        }
+
         out << "\n";
 
         if (mUsesDepthRange)
@@ -559,7 +566,12 @@ void OutputHLSL::header(TInfoSinkBase &out, const BuiltInFunctionEmulator *built
 
         if (mUsesInstanceID)
         {
-            out << "static int gl_InstanceID;";
+            out << "static int gl_InstanceID;\n";
+        }
+
+        if (mUsesViewID)
+        {
+            out << "static uint gl_ViewID_OVR;\n";
         }
 
         if (mUsesVertexID)
@@ -695,6 +707,11 @@ void OutputHLSL::header(TInfoSinkBase &out, const BuiltInFunctionEmulator *built
         out << "#define GL_USES_POINT_SIZE\n";
     }
 
+    if (mUsesViewID)
+    {
+        out << "#define GL_USES_VIEW_ID\n";
+    }
+
     if (mUsesFragDepth)
     {
         out << "#define GL_USES_FRAG_DEPTH\n";
@@ -738,6 +755,8 @@ void OutputHLSL::header(TInfoSinkBase &out, const BuiltInFunctionEmulator *built
                "}\n"
                "\n";
     }
+
+    assert(mUsesViewID == 0 || mUsesViewID != mUsesVertexID);
 
     builtInFunctionEmulator->outputEmulatedFunctions(out);
 }
@@ -842,6 +861,11 @@ void OutputHLSL::visitSymbol(TIntermSymbol *node)
         {
             mUsesFragDepth = true;
             out << "gl_Depth";
+        }
+        else if (qualifier == EvqViewIDOVR)
+        {
+            mUsesViewID = true;
+            out << name;
         }
         else if (qualifier == EvqNumWorkGroups)
         {

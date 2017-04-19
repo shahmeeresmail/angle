@@ -685,6 +685,46 @@ void GL_APIENTRY VertexAttribDivisorANGLE(GLuint index, GLuint divisor)
     }
 }
 
+void GL_APIENTRY MultiViewSetViewportsEXT(GLsizei count, const GLint *v)
+{
+    EVENT("(GLuint count = %d)", count);
+
+    Context *context = GetValidGlobalContext();
+
+    if (context)
+    {
+        if (!context->getExtensions().multiView)
+        {
+            // The debug marker calls should not set error state
+            // However, it seems reasonable to set an error state if the extension is not enabled
+            context->handleError(Error(GL_INVALID_OPERATION, "Extension not enabled"));
+            return;
+        }
+
+        // TODO: Determine if scissor rect needs to be passed in separately
+        context->enableMultiview(count);
+        context->setViewports(count, v);
+    }
+}
+
+void GL_APIENTRY MultiViewDrawElementsEXT(GLenum mode,
+                                          GLsizei count,
+                                          GLenum type,
+                                          const void *indices,
+                                          GLbitfield viewMask)
+{
+}
+
+void GL_APIENTRY MultiViewEnableEXT(GLboolean enable)
+{
+}
+
+GLboolean GL_APIENTRY MultiViewIsEnabledEXT()
+{
+    assert(0);
+    return false;
+}
+
 void GL_APIENTRY BlitFramebufferANGLE(GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1,
                           GLbitfield mask, GLenum filter)
 {
@@ -787,6 +827,22 @@ void GL_APIENTRY ProgramBinaryOES(GLuint program, GLenum binaryFormat, const voi
 }
 
 void GL_APIENTRY DrawBuffersEXT(GLsizei n, const GLenum *bufs)
+{
+    EVENT("(GLenum n = %d, bufs = 0x%0.8p)", n, bufs);
+
+    Context *context = GetValidGlobalContext();
+    if (context)
+    {
+        if (!context->skipValidation() && !ValidateDrawBuffersEXT(context, n, bufs))
+        {
+            return;
+        }
+
+        context->drawBuffers(n, bufs);
+    }
+}
+
+void GL_APIENTRY DrawMultiviewEXT(GLsizei n, const GLenum *bufs)
 {
     EVENT("(GLenum n = %d, bufs = 0x%0.8p)", n, bufs);
 

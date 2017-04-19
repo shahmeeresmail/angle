@@ -230,6 +230,10 @@ EXPORTS
     glStencilThenCoverStrokePathInstancedCHROMIUM @342
     glBindFragmentInputLocationCHROMIUM           @343
     glProgramPathFragmentInputGenCHROMIUM         @344
+    glMultiViewSetViewportsEXT                    @413
+    glMultiViewDrawElementsEXT                    @414
+    glMultiViewEnableEXT                          @415
+    glMultiViewIsEnabledEXT                       @416
 
     ; GLES 3.0 Functions
     glReadBuffer                    @180

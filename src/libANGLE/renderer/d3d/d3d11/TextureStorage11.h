@@ -81,11 +81,12 @@ class TextureStorage11 : public TextureStorage
 
     const d3d11::Format &getFormatSet() const;
 
-  protected:
-    TextureStorage11(Renderer11 *renderer, UINT bindFlags, UINT miscFlags, GLenum internalFormat);
     int getLevelWidth(int mipLevel) const;
     int getLevelHeight(int mipLevel) const;
     int getLevelDepth(int mipLevel) const;
+
+  protected:
+    TextureStorage11(Renderer11 *renderer, UINT bindFlags, UINT miscFlags, GLenum internalFormat);
 
     // Some classes (e.g. TextureStorage11_2D) will override getMippedResource.
     virtual gl::Error getMippedResource(ID3D11Resource **outResource) { return getResource(outResource); }
@@ -202,6 +203,7 @@ class TextureStorage11_2D : public TextureStorage11
 
     // Swizzle-related variables
     ID3D11Texture2D *mSwizzleTexture;
+    ID3D11Texture2D *mStagingSwizzleTexture;
     ID3D11RenderTargetView *mSwizzleRenderTargets[gl::IMPLEMENTATION_MAX_TEXTURE_LEVELS];
 
     Image11 *mAssociatedImages[gl::IMPLEMENTATION_MAX_TEXTURE_LEVELS];

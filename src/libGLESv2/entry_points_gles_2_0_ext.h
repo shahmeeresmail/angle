@@ -69,6 +69,16 @@ ANGLE_EXPORT void GL_APIENTRY DrawArraysInstancedANGLE(GLenum mode, GLint first,
 ANGLE_EXPORT void GL_APIENTRY DrawElementsInstancedANGLE(GLenum mode, GLsizei count, GLenum type, const void *indices, GLsizei primcount);
 ANGLE_EXPORT void GL_APIENTRY VertexAttribDivisorANGLE(GLuint index, GLuint divisor);
 
+// GL_OVR_multi_view
+ANGLE_EXPORT void GL_APIENTRY MultiViewSetViewportsEXT(GLsizei count, const GLint *v);
+ANGLE_EXPORT void GL_APIENTRY MultiViewDrawElementsEXT(GLenum mode,
+                                                       GLsizei count,
+                                                       GLenum type,
+                                                       const void *indices,
+                                                       GLbitfield viewMask);
+ANGLE_EXPORT void GL_APIENTRY MultiViewEnableEXT(GLboolean enable);
+ANGLE_EXPORT GLboolean GL_APIENTRY MultiViewIsEnabledEXT();
+
 // GL_OES_get_program_binary
 ANGLE_EXPORT void GL_APIENTRY GetProgramBinaryOES(GLuint program, GLsizei bufSize, GLsizei *length, GLenum *binaryFormat, GLvoid *binary);
 ANGLE_EXPORT void GL_APIENTRY ProgramBinaryOES(GLuint program, GLenum binaryFormat, const GLvoid *binary, GLint length);

@@ -1401,6 +1401,30 @@ void GL_APIENTRY glVertexAttribDivisorANGLE(GLuint index, GLuint divisor)
     return gl::VertexAttribDivisorANGLE(index, divisor);
 }
 
+void GL_APIENTRY glMultiViewSetViewportsEXT(GLsizei count, const GLint *v)
+{
+    return gl::MultiViewSetViewportsEXT(count, v);
+}
+
+void GL_APIENTRY glMultiViewDrawElementsEXT(GLenum mode,
+                                            GLsizei count,
+                                            GLenum type,
+                                            const void *indices,
+                                            GLbitfield viewMask)
+{
+    return gl::MultiViewDrawElementsEXT(mode, count, type, indices, viewMask);
+}
+
+void GL_APIENTRY glMultiViewEnableEXT(GLboolean enable)
+{
+    return gl::MultiViewEnableEXT(enable);
+}
+
+GLboolean GL_APIENTRY glMultiViewIsEnabledEXT()
+{
+    return gl::MultiViewIsEnabledEXT();
+}
+
 void GL_APIENTRY glGetProgramBinaryOES(GLuint program, GLsizei bufSize, GLsizei *length, GLenum *binaryFormat, GLvoid *binary)
 {
     return gl::GetProgramBinaryOES(program, bufSize, length, binaryFormat, binary);

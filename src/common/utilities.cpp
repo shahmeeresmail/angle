@@ -919,6 +919,7 @@ void writeFile(const char* path, const void* content, size_t size)
     fwrite(content, sizeof(char), size, file);
     fclose(file);
 }
+
 #endif // !ANGLE_ENABLE_WINDOWS_STORE
 
 #if defined (ANGLE_PLATFORM_WINDOWS)

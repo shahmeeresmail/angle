@@ -31,6 +31,8 @@ enum
 
     IMPLEMENTATION_MAX_TRANSFORM_FEEDBACK_BUFFERS = 4,
 
+    IMPLEMENTATION_MAX_VIEWPORT_SCISSOR_RECTS = 2,
+
     // These are the maximums the implementation can support
     // The actual GL caps are limited by the device caps
     // and should be queried from the Context
@@ -39,7 +41,10 @@ enum
     IMPLEMENTATION_MAX_3D_TEXTURE_SIZE         = 2048,
     IMPLEMENTATION_MAX_2D_ARRAY_TEXTURE_LAYERS = 2048,
 
-    IMPLEMENTATION_MAX_TEXTURE_LEVELS = 15  // 1+log2 of MAX_TEXTURE_SIZE
+    IMPLEMENTATION_MAX_TEXTURE_LEVELS = 15,  // 1+log2 of MAX_TEXTURE_SIZE
+
+    MULTIVIEW_XY_SIGNATURE_MASK = 0x7FFF0000,
+    MULTIVIEW_XY_SIGNATURE      = 0x7FFF0000
 };
 }
 

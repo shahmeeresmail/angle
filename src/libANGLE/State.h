@@ -133,7 +133,11 @@ class State : angle::NonCopyable
     bool isScissorTestEnabled() const;
     void setScissorTest(bool enabled);
     void setScissorParams(GLint x, GLint y, GLsizei width, GLsizei height);
+    void setScissors(GLint count, const GLint *v);
     const Rectangle &getScissor() const;
+    const Rectangle getUnionOfScissors() const;
+    const Rectangle *getScissors() const;
+    const int State::getScissorCount() const;
 
     // Dither state toggle & query
     bool isDitherEnabled() const;
@@ -159,7 +163,13 @@ class State : angle::NonCopyable
 
     // Viewport state setter/getter
     void setViewportParams(GLint x, GLint y, GLsizei width, GLsizei height);
-    const Rectangle &getViewport() const;
+    void setViewports(GLint count, const GLint *v);
+    const Rectangle &getViewport(GLint index = 0) const;
+    const int getViewportCount() const;
+    const Rectangle *getViewports() const;
+    const void enableMultiview(GLint count);
+    const int getNumViews() const;
+    const int getMultiviewMode() const;
 
     // Texture binding & active texture unit manipulation
     void setActiveSampler(unsigned int active);
@@ -200,6 +210,7 @@ class State : angle::NonCopyable
 
     // Program binding manipulation
     void setProgram(const Context *context, Program *newProgram);
+    void syncNewlyLinkedProgram(Program *program);
     Program *getProgram() const;
 
     // Transform feedback object (not buffer) binding manipulation
@@ -408,6 +419,7 @@ class State : angle::NonCopyable
         DIRTY_BIT_PATH_RENDERING_MATRIX_PROJ,  // CHROMIUM_path_rendering path projection matrix
         DIRTY_BIT_PATH_RENDERING_STENCIL_STATE,
         DIRTY_BIT_FRAMEBUFFER_SRGB,  // GL_EXT_sRGB_write_control
+        DIRTY_BIT_MULTIVIEW,
         DIRTY_BIT_CURRENT_VALUE_0,
         DIRTY_BIT_CURRENT_VALUE_MAX = DIRTY_BIT_CURRENT_VALUE_0 + MAX_VERTEX_ATTRIBS,
         DIRTY_BIT_INVALID           = DIRTY_BIT_CURRENT_VALUE_MAX,
@@ -450,7 +462,8 @@ class State : angle::NonCopyable
 
     RasterizerState mRasterizer;
     bool mScissorTest;
-    Rectangle mScissor;
+    Rectangle mScissorArray[IMPLEMENTATION_MAX_VIEWPORT_SCISSOR_RECTS];
+    GLint mScissorArrayCount;
 
     BlendState mBlend;
     ColorF mBlendColor;
@@ -467,10 +480,11 @@ class State : angle::NonCopyable
     GLenum mGenerateMipmapHint;
     GLenum mFragmentShaderDerivativeHint;
 
+    Rectangle mViewportArray[IMPLEMENTATION_MAX_VIEWPORT_SCISSOR_RECTS];
+    GLint mViewportArrayCount;
     bool mBindGeneratesResource;
     bool mClientArraysEnabled;
 
-    Rectangle mViewport;
     float mNearZ;
     float mFarZ;
 
@@ -517,6 +531,9 @@ class State : angle::NonCopyable
     PixelPackState mPack;
 
     bool mPrimitiveRestart;
+
+    GLint mViewCount;
+    GLint mMultiviewMode;
 
     Debug mDebug;
 

@@ -1381,6 +1381,11 @@ __eglMustCastToProperFunctionPointerType EGLAPIENTRY GetProcAddress(const char *
         INSERT_PROC_ADDRESS(gl, DrawElementsInstancedANGLE);
         INSERT_PROC_ADDRESS(gl, VertexAttribDivisorANGLE);
 
+        INSERT_PROC_ADDRESS(gl, MultiViewSetViewportsEXT);
+        INSERT_PROC_ADDRESS(gl, MultiViewDrawElementsEXT);
+        INSERT_PROC_ADDRESS(gl, MultiViewEnableEXT);
+        INSERT_PROC_ADDRESS(gl, MultiViewIsEnabledEXT);
+
         // GL_OES_get_program_binary
         INSERT_PROC_ADDRESS(gl, GetProgramBinaryOES);
         INSERT_PROC_ADDRESS(gl, ProgramBinaryOES);

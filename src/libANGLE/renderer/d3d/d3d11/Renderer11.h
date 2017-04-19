@@ -49,6 +49,7 @@ struct Renderer11DeviceCaps
     bool supportsDXGI1_2;               // Support for DXGI 1.2
     bool supportsClearView;             // Support for ID3D11DeviceContext1::ClearView
     bool supportsConstantBufferOffsets; // Support for Constant buffer offset
+    bool supportsVpRtIndexWriteFromVs;  // VP/RT indices can be written out from the Vertex Shader stage
     UINT B5G6R5support;                 // Bitfield of D3D11_FORMAT_SUPPORT values for DXGI_FORMAT_B5G6R5_UNORM
     UINT B4G4R4A4support;               // Bitfield of D3D11_FORMAT_SUPPORT values for DXGI_FORMAT_B4G4R4A4_UNORM
     UINT B5G5R5A1support;               // Bitfield of D3D11_FORMAT_SUPPORT values for DXGI_FORMAT_B5G5R5A1_UNORM
@@ -182,6 +183,8 @@ class Renderer11 : public RendererD3D
 
     bool getNV12TextureSupport() const;
 
+    bool canWriteVpRtIndexFromVs() const override;
+
     int getMajorShaderModel() const override;
     int getMinorShaderModel() const override;
     std::string getShaderModelSuffix() const override;
@@ -303,6 +306,7 @@ class Renderer11 : public RendererD3D
     void *getD3DDevice() override;
     ID3D11DeviceContext *getDeviceContext() { return mDeviceContext; };
     ID3D11DeviceContext1 *getDeviceContext1IfSupported() { return mDeviceContext1; };
+    ID3D11DeviceContext3 *getDeviceContext3IfSupported() { return mDeviceContext3; };
     IDXGIFactory *getDxgiFactory() { return mDxgiFactory; };
 
     RenderStateCache &getStateCache() { return mStateCache; }
@@ -579,6 +583,8 @@ class Renderer11 : public RendererD3D
     double mLastHistogramUpdateTime;
 
     ID3D11Device *mDevice;
+    ID3D11Device3 *mDevice3;
+    ID3D11DeviceContext3 *mDeviceContext3;
     Renderer11DeviceCaps mRenderer11DeviceCaps;
     ID3D11DeviceContext *mDeviceContext;
     ID3D11DeviceContext1 *mDeviceContext1;

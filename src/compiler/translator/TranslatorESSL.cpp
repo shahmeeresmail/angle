@@ -95,7 +95,7 @@ void TranslatorESSL::translate(TIntermNode *root, ShCompileOptions compileOption
                            getSymbolTable(), getShaderType(), shaderVer, precisionEmulation,
                            compileOptions);
 
-    if (compileOptions & SH_TRANSLATE_VIEWID_OVR_TO_UNIFORM)
+    if (getResources().OVR_multiview && compileOptions & SH_TRANSLATE_VIEWID_OVR_TO_UNIFORM)
     {
         TName uniformName(TString("ViewID_OVR"));
         uniformName.setInternal(true);
@@ -131,11 +131,14 @@ void TranslatorESSL::writeExtensionBehavior(ShCompileOptions compileOptions)
                 sink << "#extension GL_NV_draw_buffers : " << getBehaviorString(iter->second)
                      << "\n";
             }
-            else if (compileOptions & SH_TRANSLATE_VIEWID_OVR_TO_UNIFORM &&
+            else if (getResources().OVR_multiview &&
                      (iter->first == "GL_OVR_multiview" || iter->first == "GL_OVR_multiview2"))
             {
-                // No output
-                continue;
+                if (compileOptions & SH_TRANSLATE_VIEWID_OVR_TO_UNIFORM)
+                {
+                    // No output
+                    continue;
+                }
             }
             else
             {

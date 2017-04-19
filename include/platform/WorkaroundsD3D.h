@@ -76,6 +76,20 @@ struct WorkaroundsD3D
     // by adding Offset directly to Location before reading the texture.
     bool preAddTexelFetchOffsets = false;
 
+    // Shahmeer: When multiview SBS is enabled, generate Side-by-Side views by horizontally
+    // dividing the current viewport rect and scissor rect by the number of views.
+    bool autoCreateSbsViewsForMultiview = false;
+
+    // Shahmeer: When multiview enabled, force the number of views to two
+    bool multiviewStereoViews = false;
+
+    // Shahmeer: When multiview is enabled, use SBS mode
+    bool forceMultiviewSbs = false;
+
+    // Shahmeer: Multiview enabled and disabled depending on whether or not a shader is bound that
+    // uses the multiview shader keyword gl_ViewID_OVR
+    bool multiviewEnabledWithViewIDUsage;
+
     // On some AMD drivers, 1x1 and 2x2 mips of depth/stencil textures aren't sampled correctly.
     // We can work around this bug by doing an internal blit to a temporary single-channel texture
     // before we sample.

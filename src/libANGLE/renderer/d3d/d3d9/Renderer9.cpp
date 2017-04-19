@@ -2385,6 +2385,11 @@ int Renderer9::getMajorShaderModel() const
     return D3DSHADER_VERSION_MAJOR(mDeviceCaps.PixelShaderVersion);
 }
 
+bool Renderer9::canWriteVpRtIndexFromVs() const
+{
+    return false;
+}
+
 int Renderer9::getMinorShaderModel() const
 {
     return D3DSHADER_VERSION_MINOR(mDeviceCaps.PixelShaderVersion);

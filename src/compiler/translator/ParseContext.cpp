@@ -443,6 +443,9 @@ bool TParseContext::checkCanBeLValue(const TSourceLoc &line, const char *op, TIn
         case EvqComputeIn:
             message = "can't modify work group size variable";
             break;
+        case EvqViewIDOVR:
+            message = "can't modify gl_ViewID_OVR";
+            break;
         default:
             //
             // Type that can't be written to?
