@@ -24,12 +24,13 @@ is to eventually make its way to the master ANGLE branch.
 
 ### Multiview Rendering Modes
 
-| Render Mode               |   API Required             |   Status          |   Performance  |
-|--------------------------:|:--------------------------:|:-----------------:|:--------------:|
-| Draw-Adjust-Draw          | Any                        | Planned for FL93  |   good         |
-| Geometry Shader Redirect  | D3D11 FL10+                | Implemented       |   better       |
-| Vertex Shader Redirect    | D3D11.3 /w VPRTfromVS Cap  | Implemented       |   best         |
+| Render Mode               |   API Required              |   Status          |   Performance  |  HW Support       |
+|--------------------------:|:---------------------------:|:-----------------:|:--------------:|:-----------------:|
+| Draw-Adjust-Draw          | Any                         | Planned for FL93  |   good         |  Almost All       |
+| Geometry Shader Redirect  | D3D11 FL10+                 | Implemented       |   better       |  FL10+            |
+| Vertex Shader Redirect    | D3D11.3 /w VPRTfromVS Cap** | Implemented       |   best         |  Subset of FL10+  |
 
+** Support is exposed through an optional D3D 11.3 flag that isn't supported by all hardware/drivers. More info on [MSDN](https://msdn.microsoft.com/en-us/library/windows/desktop/dn933226(v=vs.85).aspx).
 
 #### Draw-Adjust-Draw
 For each draw, loop through all views and in each iteration:
@@ -61,6 +62,7 @@ SV_ViewportArrayIndex (if rendering SBS) or
 SV_RenderTargetArrayIndex (if rendering to a texture array)
 
 # More Info
+* Get info on [VP/RT indices output support using a VS](https://msdn.microsoft.com/en-us/library/windows/desktop/dn933226(v=vs.85).aspx) (required for Vertex Shader Redirect)
 * Read ANGLE development [documentation](doc).
 * Look at [pending](https://chromium-review.googlesource.com/#/q/project:angle/angle+status:open)
   and [merged](https://chromium-review.googlesource.com/#/q/project:angle/angle+status:merged) changes.
