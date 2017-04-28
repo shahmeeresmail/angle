@@ -61,6 +61,52 @@ it into one and make the instance count equal to the number of views
 SV_ViewportArrayIndex (if rendering SBS) or 
 SV_RenderTargetArrayIndex (if rendering to a texture array)
 
+# Setup
+
+### Prototype setup:
+1.	Clone and build the [MultiviewPrototype ANGLE branch](https://github.com/shahmeeresmail/angle/tree/MultiviewPrototype)
+2.	Clone the modified [Stereo three.js samples](https://github.com/shahmeeresmail/three.js/tree/StereoMultiview)
+3.	Download chrome canary, build chromium from source or use another browser that will allow cmd stream pass through, draft extensions and local file access
+
+### Workaround flags
+Since Multiview isn't an official extension, its interfaces have not been exposed. Futher, the it currently does not specify any way to do side-by-side rendering. Therefore, workaround flags have been put in the ANGLE MultiviewPrototype branch to allow multiview to operate in some form. They are currently all enabled by default but this will probably change when Webgl_Multiview becomes officially supported. The flags are:
+- multiviewEnabledWithViewIDUsage
+    * Multiview is enabled and disabled depending on whether or not a shader is bound that uses multiview. This is needed until an extension interface is exposed that allows enabling/disabling of multiview.
+- forceMultiviewSbs
+    * When multiview is enabled, use SBS mode only. Needed until modes other than SBS are supported.
+- multiviewStereoViews
+    * When multiview enabled, force the view index to start at zero and the number of views to always be two. Needed until extension interfaces exposed to set the start offset and view count.
+- autoCreateSbsViewsForMultiview
+    * When multiview is enabled in SBS mode, generate Side-by-Side views by horizontally dividing the current viewport rect and scissor rect by the number of views. Needed until multiple viewports and scissors can be set.
+    
+### To Enable Multiview usage in samples:
+1.	Do a Find/replace in the three.js samples html/js files:
+a.	Find: var useMultiviewExtension = false;
+b.	Replace: var useMultiviewExtension = true;
+2.	Save all
+
+### To Disable Multiview usage in samples:
+1.	Do a Find/replace in the three.js samples html/js files:
+a.	Find: var useMultiviewExtension = true;
+b.	Replace: var useMultiviewExtension = false;
+2.	Save all
+
+### Running samples:
+1.	Enable/Disable Multiview usage
+2.	Close any browsers running samples (for now this is necessary to ensure shaders are properly recompiled when toggling Multiview on or off)
+3.	Launch a browser with cmd/shader passthrough enabled, draft/unknown extensions enabled and local file access
+a.	On chrome the command line is:
+chrome --use-passthrough-cmd-decoder --allow-insecure-localhost --enable-webgl-draft-extensions --allow-file-access-from-files
+b.	For firefox, edge and others, I am not sure what the command line parameters are. It may require custom builds
+4.	Open index.html from the cloned samples using the previously launched browser instance. This will launch the sample browser where individual samples can be launched. Samples using Multiview should render two images side-by-side
+
+### Notes:
+-	Not all samples work yet. Some need additional shader or code modifications in order to work and others just won’t work well with multiview. 
+-	Working samples should display rendered output side by side regardless of whether or not the Multiview extension is enabled. 
+-	GPU bound samples will probably show little to no performance increase with Multiview whereas CPU bound ones can show significant gains.
+-	If you are using chrome/chromium and would like to debug ANGLE while running the samples, add “--gpu-startup-dialog” to the command line parameters. This will  output the GPU process ID into a message box and pause execution until the message box is closed. Once the message box shows up, you can attach to the GPU process ID listed using Visual Studio and then close the message box to continue execution when you are ready. 
+
+
 # More Info
 * Get info on [VP/RT indices output support using a VS](https://msdn.microsoft.com/en-us/library/windows/desktop/dn933226(v=vs.85).aspx) (required for Vertex Shader Redirect)
 * Read ANGLE development [documentation](doc).
